@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dpeot"
+version = "0.1.0"
+description = "Identity-preserving extended-object tracking with nonparametric measurement partition proposals."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Florian Pfaff" }]
+dependencies = [
+  "numpy>=1.24",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["dpeot*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
