@@ -44,15 +44,42 @@ dpeot/
 tests/            Unit tests for scenario and metric primitives.
 ```
 
-## Minimal run target
+## Minimal benchmark
 
-Once dependencies are installed, the first experiment entry point is:
+Install the package in editable mode:
 
 ```bash
-python -m dpeot.experiments.run_two_target_crossing
+python -m pip install -e .[dev]
 ```
 
-This produces a small Monte Carlo summary for the two-target merge/split scenario.
+Run the first Monte Carlo benchmark:
+
+```bash
+python -m dpeot.experiments.run_two_target_crossing --num-trials 100
+```
+
+The benchmark currently compares:
+
+- `distance_collapse`: a baseline that loses identity memory during the unresolved interval;
+- `dp_x_order`: an unlabeled clustering baseline with canonical left-to-right labels;
+- `proposed_group_labels`: the minimal identity-aware unresolved-group filter;
+- `oracle_identity`: a perfect-identity upper bound.
+
+The printed metrics are identity switches, post-split label recovery, split recovery delay, group-membership accuracy during unresolved scans, unlabeled position error, and runtime per scan.
+
+## Diagnostic figure
+
+Install the optional plotting dependency:
+
+```bash
+python -m pip install -e .[plot]
+```
+
+Create the first merge/split scenario figure:
+
+```bash
+python -m dpeot.experiments.plot_two_target_timeline --output two_target_merge_split.pdf
+```
 
 ## Design rule
 
