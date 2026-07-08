@@ -129,14 +129,15 @@ def _summarize_result(
     post_split_assignments = result.assignments[split_index:]
     split_delay = split_recovery_delay(result.assignments, labels, split_index)
     unresolved_horizon = len(result.assignments) - split_index + 1
+    unresolved_indices = [i for i, scan in enumerate(scenario.scans) if scan.is_unresolved]
 
     return {
         "id_switches": float(count_identity_switches(result.assignments)),
         "label_recovery": label_recovery_accuracy(post_split_assignments, labels),
         "split_delay": float(split_delay if split_delay is not None else unresolved_horizon),
         "group_membership": group_membership_accuracy(
-            result.group_membership_trace,
-            [scan.unresolved_members for scan in scenario.scans],
+            [result.group_membership_trace[i] for i in unresolved_indices],
+            [scenario.scans[i].unresolved_members for i in unresolved_indices],
         ),
         "position_error": mean_unlabeled_position_error(scenario, result),
         "runtime_per_scan": elapsed / len(scenario.scans),
