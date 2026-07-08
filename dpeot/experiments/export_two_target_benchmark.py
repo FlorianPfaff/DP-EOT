@@ -27,6 +27,8 @@ METHOD_LABELS = {
     "oracle_identity": "Oracle identity",
 }
 
+LATEX_LINE_BREAK = r"\\"
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -80,7 +82,10 @@ def format_markdown_table(rows: list[dict[str, float | str]]) -> str:
 
     header = "| " + " | ".join(label for _, label in METRIC_COLUMNS) + " |"
     separator = "| " + " | ".join(["---"] + ["---:"] * (len(METRIC_COLUMNS) - 1)) + " |"
-    body = ["| " + " | ".join(_format_cell(row, key) for key, _ in METRIC_COLUMNS) + " |" for row in rows]
+    body = [
+        "| " + " | ".join(_format_cell(row, key) for key, _ in METRIC_COLUMNS) + " |"
+        for row in rows
+    ]
     return "\n".join([header, separator, *body])
 
 
@@ -94,12 +99,12 @@ def format_latex_table(rows: list[dict[str, float | str]]) -> str:
         "\\label{tab:initial-benchmark}",
         "\\begin{tabular}{lrrrrrr}",
         "\\toprule",
-        "Method & IDsw & Rec. & Delay & Group & Pos. & ms \\\",
+        f"Method & IDsw & Rec. & Delay & Group & Pos. & ms {LATEX_LINE_BREAK}",
         "\\midrule",
     ]
     for row in rows:
         lines.append(
-            "{} & {:.2f} & {:.2f} & {:.2f} & {:.2f} & {:.3f} & {:.3f} \\\".format(
+            "{} & {:.2f} & {:.2f} & {:.2f} & {:.2f} & {:.3f} & {:.3f} {}".format(
                 _method_label(str(row["method"])),
                 float(row["id_switches"]),
                 float(row["label_recovery"]),
@@ -107,6 +112,7 @@ def format_latex_table(rows: list[dict[str, float | str]]) -> str:
                 float(row["group_membership"]),
                 float(row["position_error"]),
                 float(row["runtime_ms_per_scan"]),
+                LATEX_LINE_BREAK,
             )
         )
     lines.extend([
