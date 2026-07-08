@@ -58,6 +58,20 @@ Run the first Monte Carlo benchmark:
 python -m dpeot.experiments.run_two_target_crossing --num-trials 100
 ```
 
+Export paper-ready benchmark artifacts:
+
+```bash
+python -m dpeot.experiments.export_two_target_benchmark --num-trials 100 --output-dir results
+```
+
+The exporter writes:
+
+```text
+results/two_target_benchmark.json
+results/two_target_benchmark.md
+results/two_target_benchmark_table.tex
+```
+
 The benchmark currently compares:
 
 - `distance_collapse`: a baseline that loses identity memory during the unresolved interval;
@@ -66,6 +80,10 @@ The benchmark currently compares:
 - `oracle_identity`: a perfect-identity upper bound.
 
 The printed metrics are identity switches, post-split label recovery, split recovery delay, group-membership accuracy during unresolved scans, unlabeled position error, and runtime per scan.
+
+## GitHub Actions
+
+The `CI and benchmark` workflow runs on push, pull request, and manual dispatch. It installs the package, runs `pytest`, executes the 100-trial two-target benchmark, and uploads the `two-target-benchmark` artifact containing JSON, Markdown, and LaTeX result files.
 
 ## Diagnostic figure
 
