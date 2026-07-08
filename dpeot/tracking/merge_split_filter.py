@@ -33,6 +33,7 @@ class FilterConfig:
     measurement_noise_scale: float = 0.08
     missed_cell_log_score: float = -35.0
     collapse_velocity_damping: float = 0.0
+    min_assignment_rate_fraction: float = 0.25
 
 
 @dataclass(frozen=True)
@@ -403,6 +404,9 @@ def _assign_cells_to_targets(
                 assignment[target.label] = []
                 continue
             cell = list(cells[cell_index])
+            if not _cell_count_is_plausible_for_target(cell, target, config):
+                score = -inf
+                break
             score += _score_cell_for_target(measurements, cell, target, config)
             assignment[target.label] = cell
 
@@ -431,6 +435,15 @@ def _best_group_cell(
     return list(
         max(cells, key=lambda cell: _score_cell_for_target(measurements, cell, pseudo_target, config))
     )
+
+
+def _cell_count_is_plausible_for_target(
+    cell: Sequence[int],
+    target: ResolvedTarget,
+    config: FilterConfig,
+) -> bool:
+    min_count = max(2, int(round(config.min_assignment_rate_fraction * target.measurement_rate)))
+    return len(cell) >= min_count
 
 
 def _score_cell_for_target(
