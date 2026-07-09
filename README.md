@@ -102,6 +102,19 @@ The controls compare a true merge with three cases where the detector should not
 
 The exporter writes `negative_controls.json`, `negative_controls.md`, and `negative_controls_table.tex`. The paper-facing readout is high recall for `true_merge` and low false group scan rate for the three no-merge controls.
 
+## Detector threshold calibration
+
+Sweep the merge-score threshold over true-merge and no-merge scenarios:
+
+```bash
+python -m dpeot.experiments.export_detector_threshold_sweep \
+  --num-trials 50 \
+  --output-dir results/detector_threshold_sweep \
+  --figure-dir figures
+```
+
+The exporter writes JSON, CSV, Markdown, a LaTeX table at the operating threshold, and `figures/detector_threshold_sweep.png`. The intended readout is a detector tradeoff: true-merge recall should remain high while no-merge false group scan rates remain low.
+
 ## Stress sweeps
 
 Run the merge-duration/clutter-rate heatmap slice:
@@ -130,7 +143,7 @@ python -m dpeot.experiments.export_stress_sweep \
 
 ## GitHub Actions
 
-The `CI and benchmark` workflow runs on push, pull request, and manual dispatch. It installs the package, runs `pytest`, executes the 100-trial two-target benchmark and detector negative controls, and uploads the `benchmark-results` artifact containing JSON, Markdown, and LaTeX result files.
+The `CI and benchmark` workflow runs on push, pull request, and manual dispatch. It installs the package, runs `pytest`, executes the 100-trial two-target benchmark, detector negative controls, and detector threshold sweep, and uploads the `benchmark-results` artifact containing JSON, Markdown, LaTeX result files, and detector calibration figures.
 
 ## Diagnostic figure
 
