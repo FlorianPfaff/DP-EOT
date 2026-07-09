@@ -1,5 +1,8 @@
 from dpeot.scenarios.two_target_merge_split import (
     ScenarioConfig,
+    generate_near_miss_no_merge,
+    generate_parallel_close_tracks,
+    generate_single_large_extended_target,
     generate_two_target_merge_split,
     oracle_cells,
 )
@@ -45,3 +48,17 @@ def test_scenario_supports_asymmetric_rates_extents_and_crossing_angle() -> None
     assert target_a.extent[0, 0] != target_b.extent[0, 0]
     assert target_a.states[0, 1] == -2.0
     assert target_b.states[0, 1] == 2.0
+
+
+def test_negative_control_scenarios_have_no_unresolved_truth() -> None:
+    config = ScenarioConfig(seed=4)
+
+    for generator in (generate_near_miss_no_merge, generate_parallel_close_tracks):
+        scenario = generator(config)
+        assert scenario.labels == ("A", "B")
+        assert all(not scan.unresolved_members for scan in scenario.scans)
+
+    single = generate_single_large_extended_target(config)
+    assert single.labels == ("A",)
+    assert all(not scan.unresolved_members for scan in single.scans)
+    assert single.targets[0].measurement_rate == 2.0 * config.measurement_rate

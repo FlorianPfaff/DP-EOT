@@ -1,6 +1,11 @@
 from dpeot.metrics.identity import label_recovery_accuracy, split_recovery_delay
+from dpeot.partitions.distance_partition import distance_partition
 from dpeot.partitions.oracle_partition import oracle_partition
-from dpeot.scenarios.two_target_merge_split import ScenarioConfig, generate_two_target_merge_split
+from dpeot.scenarios.two_target_merge_split import (
+    ScenarioConfig,
+    generate_single_large_extended_target,
+    generate_two_target_merge_split,
+)
 from dpeot.tracking.merge_split_filter import (
     run_detected_group_filter,
     run_identity_aware_group_filter,
@@ -65,3 +70,13 @@ def test_left_to_right_clustering_baseline_swaps_after_crossing() -> None:
     split_index = scenario.config.merge_end + 1
 
     assert label_recovery_accuracy(result.assignments[split_index:], scenario.labels) == 0.0
+
+
+def test_detected_group_filter_does_not_group_single_large_target() -> None:
+    scenario = generate_single_large_extended_target(ScenarioConfig(seed=1))
+    result = run_detected_group_filter(
+        scenario,
+        partitioner=lambda scan: distance_partition(scan.measurements, threshold=1.25),
+    )
+
+    assert all(not members for members in result.group_membership_trace)

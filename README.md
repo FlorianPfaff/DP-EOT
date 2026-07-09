@@ -86,6 +86,22 @@ The MFM ablation is included to separate the value of flexible partition inferen
 
 The headline metrics are post-split identity switches, post-split label recovery, split recovery delay, group-detection F1, merge-onset delay, split-release delay, false group scans, unlabeled position error, and runtime per scan. Group-detection F1 is membership-aware: it gives credit only when the detected unresolved member set matches truth exactly. The JSON artifact also keeps group-detection precision/recall, missed group scans, wrong-membership scans, group-membership accuracy during unresolved scans, and total, pre-merge, during-unresolved, post-split, and resolved-period identity-switch diagnostics. Total identity switches are useful for debugging, but post-split switches are the paper-facing identity metric because individual identities may be physically unobservable inside the merged blob.
 
+## Detector negative controls
+
+Export the merge-detector identifiability controls:
+
+```bash
+python -m dpeot.experiments.export_negative_controls --num-trials 100 --output-dir results
+```
+
+The controls compare a true merge with three cases where the detector should not create a two-label unresolved group:
+
+- `near_miss_no_merge`: two targets pass close to each other but remain resolved;
+- `parallel_close_tracks`: two close tracks move in parallel and remain resolved;
+- `single_large_extended_target`: one large extended target generates many measurements but has no two-target member set.
+
+The exporter writes `negative_controls.json`, `negative_controls.md`, and `negative_controls_table.tex`. The paper-facing readout is high recall for `true_merge` and low false group scan rate for the three no-merge controls.
+
 ## Stress sweeps
 
 Run the merge-duration/clutter-rate heatmap slice:
@@ -114,7 +130,7 @@ python -m dpeot.experiments.export_stress_sweep \
 
 ## GitHub Actions
 
-The `CI and benchmark` workflow runs on push, pull request, and manual dispatch. It installs the package, runs `pytest`, executes the 100-trial two-target benchmark, and uploads the `two-target-benchmark` artifact containing JSON, Markdown, and LaTeX result files.
+The `CI and benchmark` workflow runs on push, pull request, and manual dispatch. It installs the package, runs `pytest`, executes the 100-trial two-target benchmark and detector negative controls, and uploads the `benchmark-results` artifact containing JSON, Markdown, and LaTeX result files.
 
 ## Diagnostic figure
 

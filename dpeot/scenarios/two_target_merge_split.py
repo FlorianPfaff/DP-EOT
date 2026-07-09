@@ -82,12 +82,12 @@ class Scenario:
     """Complete synthetic scenario."""
 
     config: ScenarioConfig
-    targets: tuple[TargetTrajectory, TargetTrajectory]
+    targets: tuple[TargetTrajectory, ...]
     scans: tuple[Scan, ...]
 
     @property
-    def labels(self) -> tuple[Label, Label]:
-        return tuple(target.label for target in self.targets)  # type: ignore[return-value]
+    def labels(self) -> tuple[Label, ...]:
+        return tuple(target.label for target in self.targets)
 
 
 def generate_two_target_merge_split(config: ScenarioConfig | None = None) -> Scenario:
@@ -101,36 +101,89 @@ def generate_two_target_merge_split(config: ScenarioConfig | None = None) -> Sce
 
     config = config or ScenarioConfig()
     config.validate()
-    rng = np.random.default_rng(config.seed)
+    targets = _crossing_targets(config)
+    return _scenario_from_targets(
+        config,
+        targets,
+        unresolved_interval=(config.merge_start, config.merge_end),
+    )
 
+
+def generate_near_miss_no_merge(config: ScenarioConfig | None = None) -> Scenario:
+    """Generate two targets that pass close to each other without merging."""
+
+    config = config or ScenarioConfig()
+    config.validate()
     crossing_step = 0.5 * (config.num_steps - 1)
     x_velocity = 8.0 / max(crossing_step, 1.0)
-    y_velocity = config.crossing_y_offset / max(crossing_step * config.dt, config.dt)
+    separation = 2.8
     rates = config.measurement_rates or (config.measurement_rate, config.measurement_rate)
+    targets = _two_targets_from_states(
+        config,
+        states_a=_constant_velocity_states(
+            start=np.array([-8.0, -0.5 * separation]),
+            velocity=np.array([x_velocity, 0.0]),
+            num_steps=config.num_steps,
+            dt=config.dt,
+        ),
+        states_b=_constant_velocity_states(
+            start=np.array([8.0, 0.5 * separation]),
+            velocity=np.array([-x_velocity, 0.0]),
+            num_steps=config.num_steps,
+            dt=config.dt,
+        ),
+        rates=rates,
+    )
+    return _scenario_from_targets(config, targets, unresolved_interval=None)
 
-    states_a = _constant_velocity_states(
-        start=np.array([-8.0, -config.crossing_y_offset]),
-        velocity=np.array([x_velocity, y_velocity]),
+
+def generate_parallel_close_tracks(config: ScenarioConfig | None = None) -> Scenario:
+    """Generate two close, parallel, continuously resolved target tracks."""
+
+    config = config or ScenarioConfig()
+    config.validate()
+    x_velocity = 12.0 / max((config.num_steps - 1) * config.dt, config.dt)
+    separation = 2.8
+    rates = config.measurement_rates or (config.measurement_rate, config.measurement_rate)
+    targets = _two_targets_from_states(
+        config,
+        states_a=_constant_velocity_states(
+            start=np.array([-6.0, -0.5 * separation]),
+            velocity=np.array([x_velocity, 0.0]),
+            num_steps=config.num_steps,
+            dt=config.dt,
+        ),
+        states_b=_constant_velocity_states(
+            start=np.array([-6.0, 0.5 * separation]),
+            velocity=np.array([x_velocity, 0.0]),
+            num_steps=config.num_steps,
+            dt=config.dt,
+        ),
+        rates=rates,
+    )
+    return _scenario_from_targets(config, targets, unresolved_interval=None)
+
+
+def generate_single_large_extended_target(config: ScenarioConfig | None = None) -> Scenario:
+    """Generate one large extended target that should not form a two-label group."""
+
+    config = config or ScenarioConfig()
+    config.validate()
+    x_velocity = 12.0 / max((config.num_steps - 1) * config.dt, config.dt)
+    states = _constant_velocity_states(
+        start=np.array([-6.0, 0.0]),
+        velocity=np.array([x_velocity, 0.0]),
         num_steps=config.num_steps,
         dt=config.dt,
     )
-    states_b = _constant_velocity_states(
-        start=np.array([8.0, config.crossing_y_offset]),
-        velocity=np.array([-x_velocity, -y_velocity]),
-        num_steps=config.num_steps,
-        dt=config.dt,
+    extent = np.diag(np.square(np.asarray((1.7, 0.65), dtype=float)))
+    target = TargetTrajectory(
+        label="A",
+        states=states,
+        extent=extent,
+        measurement_rate=2.0 * config.measurement_rate,
     )
-
-    extent_a = np.diag(np.square(np.asarray(config.extent_axes, dtype=float)))
-    extent_b_axes = config.extent_axes_b or config.extent_axes
-    extent_b = np.diag(np.square(np.asarray(extent_b_axes, dtype=float)))
-    targets = (
-        TargetTrajectory(label="A", states=states_a, extent=extent_a, measurement_rate=rates[0]),
-        TargetTrajectory(label="B", states=states_b, extent=extent_b, measurement_rate=rates[1]),
-    )
-
-    scans = tuple(_sample_scan(k, targets, config, rng) for k in range(config.num_steps))
-    return Scenario(config=config, targets=targets, scans=scans)
+    return _scenario_from_targets(config, (target,), unresolved_interval=None)
 
 
 def oracle_cells(scan: Scan, group_during_unresolved: bool = True) -> list[list[int]]:
@@ -180,18 +233,83 @@ def _constant_velocity_states(
     return states
 
 
+def _crossing_targets(config: ScenarioConfig) -> tuple[TargetTrajectory, TargetTrajectory]:
+    crossing_step = 0.5 * (config.num_steps - 1)
+    x_velocity = 8.0 / max(crossing_step, 1.0)
+    y_velocity = config.crossing_y_offset / max(crossing_step * config.dt, config.dt)
+    rates = config.measurement_rates or (config.measurement_rate, config.measurement_rate)
+    return _two_targets_from_states(
+        config,
+        states_a=_constant_velocity_states(
+            start=np.array([-8.0, -config.crossing_y_offset]),
+            velocity=np.array([x_velocity, y_velocity]),
+            num_steps=config.num_steps,
+            dt=config.dt,
+        ),
+        states_b=_constant_velocity_states(
+            start=np.array([8.0, config.crossing_y_offset]),
+            velocity=np.array([-x_velocity, -y_velocity]),
+            num_steps=config.num_steps,
+            dt=config.dt,
+        ),
+        rates=rates,
+    )
+
+
+def _two_targets_from_states(
+    config: ScenarioConfig,
+    states_a: np.ndarray,
+    states_b: np.ndarray,
+    rates: tuple[float, float],
+) -> tuple[TargetTrajectory, TargetTrajectory]:
+    extent_a = np.diag(np.square(np.asarray(config.extent_axes, dtype=float)))
+    extent_b_axes = config.extent_axes_b or config.extent_axes
+    extent_b = np.diag(np.square(np.asarray(extent_b_axes, dtype=float)))
+    return (
+        TargetTrajectory(label="A", states=states_a, extent=extent_a, measurement_rate=rates[0]),
+        TargetTrajectory(label="B", states=states_b, extent=extent_b, measurement_rate=rates[1]),
+    )
+
+
+def _scenario_from_targets(
+    config: ScenarioConfig,
+    targets: tuple[TargetTrajectory, ...],
+    unresolved_interval: tuple[int, int] | None,
+) -> Scenario:
+    rng = np.random.default_rng(config.seed)
+    scans = tuple(
+        _sample_scan(
+            k,
+            targets,
+            config,
+            rng,
+            unresolved_members=_unresolved_members_for_scan(k, targets, unresolved_interval),
+        )
+        for k in range(config.num_steps)
+    )
+    return Scenario(config=config, targets=targets, scans=scans)
+
+
+def _unresolved_members_for_scan(
+    k: int,
+    targets: Iterable[TargetTrajectory],
+    unresolved_interval: tuple[int, int] | None,
+) -> frozenset[Label]:
+    if unresolved_interval is None:
+        return frozenset()
+    start, end = unresolved_interval
+    if start <= k <= end:
+        return frozenset(target.label for target in targets)
+    return frozenset()
+
+
 def _sample_scan(
     k: int,
     targets: Iterable[TargetTrajectory],
     config: ScenarioConfig,
     rng: np.random.Generator,
+    unresolved_members: frozenset[Label],
 ) -> Scan:
-    unresolved_members = (
-        frozenset(target.label for target in targets)
-        if config.merge_start <= k <= config.merge_end
-        else frozenset()
-    )
-
     measurements: list[np.ndarray] = []
     origins: list[Label | None] = []
 

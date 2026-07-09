@@ -557,6 +557,15 @@ def _merge_decision(
     resolved_assignment, resolved_score = _best_resolved_assignment(
         measurements, cells, targets, config, allow_missed=False
     )
+    if len(targets) < 2:
+        return MergeDecision(
+            use_group=False,
+            resolved_score=resolved_score,
+            group_score=-inf,
+            resolved_assignment=resolved_assignment,
+            group_cell=None,
+        )
+
     group_cell, group_score = _best_group_hypothesis(measurements, cells, targets, config)
     use_group = group_cell is not None and (
         group_score - resolved_score > config.merge_score_threshold
@@ -628,7 +637,7 @@ def _best_group_hypothesis(
     targets: Sequence[ResolvedTarget],
     config: FilterConfig,
 ) -> tuple[list[int] | None, float]:
-    if not cells:
+    if not cells or len(targets) < 2:
         return None, -inf
 
     group = merge_targets(tuple(targets))

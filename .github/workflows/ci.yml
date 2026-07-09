@@ -33,8 +33,15 @@ jobs:
             --base-seed 7 \
             --output-dir results
 
+      - name: Run detector negative controls
+        run: |
+          python -m dpeot.experiments.export_negative_controls \
+            --num-trials 100 \
+            --base-seed 11000 \
+            --output-dir results
+
       - name: Upload benchmark artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: two-target-benchmark
+          name: benchmark-results
           path: results/
