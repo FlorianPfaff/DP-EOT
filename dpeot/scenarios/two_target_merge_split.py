@@ -27,10 +27,13 @@ class ScenarioConfig:
     merge_start: int = 17
     merge_end: int = 23
     measurement_rate: float = 12.0
+    measurement_rates: tuple[float, float] | None = None
     clutter_rate: float = 2.0
     clutter_extent: float = 12.0
     extent_axes: tuple[float, float] = (0.8, 0.25)
+    extent_axes_b: tuple[float, float] | None = None
     measurement_noise_std: float = 0.08
+    crossing_y_offset: float = 0.35
     seed: int = 7
 
     def validate(self) -> None:
@@ -40,8 +43,14 @@ class ScenarioConfig:
             raise ValueError("merge_start and merge_end must define a valid interval")
         if self.measurement_rate <= 0:
             raise ValueError("measurement_rate must be positive")
+        if self.measurement_rates is not None and any(rate <= 0 for rate in self.measurement_rates):
+            raise ValueError("measurement_rates must be positive")
         if self.clutter_rate < 0:
             raise ValueError("clutter_rate cannot be negative")
+        if self.measurement_noise_std < 0:
+            raise ValueError("measurement_noise_std cannot be negative")
+        if self.crossing_y_offset < 0:
+            raise ValueError("crossing_y_offset cannot be negative")
 
 
 @dataclass(frozen=True)
@@ -51,6 +60,7 @@ class TargetTrajectory:
     label: Label
     states: np.ndarray  # shape: (num_steps, 4), columns x, y, vx, vy
     extent: np.ndarray  # shape: (2, 2)
+    measurement_rate: float
 
 
 @dataclass(frozen=True)
@@ -93,23 +103,30 @@ def generate_two_target_merge_split(config: ScenarioConfig | None = None) -> Sce
     config.validate()
     rng = np.random.default_rng(config.seed)
 
+    crossing_step = 0.5 * (config.num_steps - 1)
+    x_velocity = 8.0 / max(crossing_step, 1.0)
+    y_velocity = config.crossing_y_offset / max(crossing_step * config.dt, config.dt)
+    rates = config.measurement_rates or (config.measurement_rate, config.measurement_rate)
+
     states_a = _constant_velocity_states(
-        start=np.array([-8.0, -0.35]),
-        velocity=np.array([0.4, 0.0175]),
+        start=np.array([-8.0, -config.crossing_y_offset]),
+        velocity=np.array([x_velocity, y_velocity]),
         num_steps=config.num_steps,
         dt=config.dt,
     )
     states_b = _constant_velocity_states(
-        start=np.array([8.0, 0.35]),
-        velocity=np.array([-0.4, -0.0175]),
+        start=np.array([8.0, config.crossing_y_offset]),
+        velocity=np.array([-x_velocity, -y_velocity]),
         num_steps=config.num_steps,
         dt=config.dt,
     )
 
-    extent = np.diag(np.square(np.asarray(config.extent_axes, dtype=float)))
+    extent_a = np.diag(np.square(np.asarray(config.extent_axes, dtype=float)))
+    extent_b_axes = config.extent_axes_b or config.extent_axes
+    extent_b = np.diag(np.square(np.asarray(extent_b_axes, dtype=float)))
     targets = (
-        TargetTrajectory(label="A", states=states_a, extent=extent),
-        TargetTrajectory(label="B", states=states_b, extent=extent),
+        TargetTrajectory(label="A", states=states_a, extent=extent_a, measurement_rate=rates[0]),
+        TargetTrajectory(label="B", states=states_b, extent=extent_b, measurement_rate=rates[1]),
     )
 
     scans = tuple(_sample_scan(k, targets, config, rng) for k in range(config.num_steps))
@@ -178,12 +195,12 @@ def _sample_scan(
     measurements: list[np.ndarray] = []
     origins: list[Label | None] = []
 
-    measurement_cov = _measurement_covariance(config)
     for target in targets:
-        count = rng.poisson(config.measurement_rate)
+        count = rng.poisson(target.measurement_rate)
         if count == 0:
             continue
         center = target.states[k, :2]
+        measurement_cov = _measurement_covariance(target.extent, config.measurement_noise_std)
         target_measurements = rng.multivariate_normal(center, measurement_cov, size=count)
         measurements.extend(target_measurements)
         origins.extend([target.label] * count)
@@ -214,7 +231,6 @@ def _sample_scan(
     )
 
 
-def _measurement_covariance(config: ScenarioConfig) -> np.ndarray:
-    extent = np.diag(np.square(np.asarray(config.extent_axes, dtype=float)))
-    noise = np.square(config.measurement_noise_std) * np.eye(2)
+def _measurement_covariance(extent: np.ndarray, measurement_noise_std: float) -> np.ndarray:
+    noise = np.square(measurement_noise_std) * np.eye(2)
     return extent + noise

@@ -86,6 +86,30 @@ The MFM ablation is included to separate the value of flexible partition inferen
 
 The headline metrics are post-split identity switches, post-split label recovery, split recovery delay, group-membership accuracy during unresolved scans, unlabeled position error, and runtime per scan. The JSON artifact also keeps total, pre-merge, during-unresolved, post-split, and resolved-period identity-switch diagnostics. Total identity switches are useful for debugging, but post-split switches are the paper-facing identity metric because individual identities may be physically unobservable inside the merged blob.
 
+## Stress sweeps
+
+Run the merge-duration/clutter-rate heatmap slice:
+
+```bash
+python -m dpeot.experiments.export_stress_sweep \
+  --num-trials 5 \
+  --profile heatmap \
+  --output-dir results/stress_sweep \
+  --figure-dir figures
+```
+
+The heatmap profile compares `distance_collapse`, `dp_x_order`, `mfm_x_order`, `labeled_split_hypothesis`, and `proposed_group_labels` over merge durations `3, 5, 7, 10, 15` and clutter rates `0, 2, 5, 10`. It writes JSON, CSV, Markdown heatmap tables, and `figures/stress_label_recovery_heatmaps.png`.
+
+Run the full synthetic stress grid across merge duration, clutter rate, measurement noise, extent similarity, rate asymmetry, and crossing angle:
+
+```bash
+python -m dpeot.experiments.export_stress_sweep \
+  --num-trials 5 \
+  --profile full \
+  --output-dir results/stress_sweep_full \
+  --figure-dir figures
+```
+
 ## GitHub Actions
 
 The `CI and benchmark` workflow runs on push, pull request, and manual dispatch. It installs the package, runs `pytest`, executes the 100-trial two-target benchmark, and uploads the `two-target-benchmark` artifact containing JSON, Markdown, and LaTeX result files.

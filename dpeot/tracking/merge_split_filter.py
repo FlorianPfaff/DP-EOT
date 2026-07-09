@@ -465,7 +465,7 @@ def _initial_targets(scenario: Scenario) -> tuple[ResolvedTarget, ...]:
             mean=target.states[0].copy(),
             covariance=covariance.copy(),
             extent=target.extent.copy(),
-            measurement_rate=scenario.config.measurement_rate,
+            measurement_rate=target.measurement_rate,
         )
         for target in scenario.targets
     )
