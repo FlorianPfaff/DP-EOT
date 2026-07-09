@@ -40,8 +40,18 @@ jobs:
             --base-seed 11000 \
             --output-dir results
 
+      - name: Run detector threshold sweep
+        run: |
+          python -m dpeot.experiments.export_detector_threshold_sweep \
+            --num-trials 25 \
+            --base-seed 13000 \
+            --output-dir results/detector_threshold_sweep \
+            --figure-dir figures
+
       - name: Upload benchmark artifacts
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-results
-          path: results/
+          path: |
+            results/
+            figures/detector_threshold_sweep.png
