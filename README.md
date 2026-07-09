@@ -95,7 +95,8 @@ python -m dpeot.experiments.export_stress_sweep \
   --num-trials 5 \
   --profile heatmap \
   --output-dir results/stress_sweep \
-  --figure-dir figures
+  --figure-dir figures \
+  --workers 1
 ```
 
 The heatmap profile compares `distance_collapse`, `dp_x_order`, `mfm_x_order`, `labeled_split_hypothesis`, and `proposed_group_labels` over merge durations `3, 5, 7, 10, 15` and clutter rates `0, 2, 5, 10`. It writes JSON, CSV, Markdown heatmap tables, and `figures/stress_label_recovery_heatmaps.png`.
@@ -107,7 +108,8 @@ python -m dpeot.experiments.export_stress_sweep \
   --num-trials 5 \
   --profile full \
   --output-dir results/stress_sweep_full \
-  --figure-dir figures
+  --figure-dir figures \
+  --workers 32
 ```
 
 ## GitHub Actions

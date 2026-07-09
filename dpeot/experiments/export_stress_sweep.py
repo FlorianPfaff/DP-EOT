@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import multiprocessing as mp
 from collections.abc import Iterable, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -81,6 +82,7 @@ def main() -> None:
     parser.add_argument("--profile", choices=("heatmap", "full"), default="heatmap")
     parser.add_argument("--output-dir", type=Path, default=Path("results/stress_sweep"))
     parser.add_argument("--figure-dir", type=Path, default=Path("figures"))
+    parser.add_argument("--workers", type=int, default=1)
     parser.add_argument("--no-figures", action="store_true")
     args = parser.parse_args()
 
@@ -88,6 +90,7 @@ def main() -> None:
         num_trials=args.num_trials,
         base_seed=args.base_seed,
         profile=args.profile,
+        workers=args.workers,
     )
     write_stress_artifacts(
         rows=rows,
@@ -112,11 +115,14 @@ def run_stress_sweep(
     extent_modes: Sequence[str] | None = None,
     rate_modes: Sequence[str] | None = None,
     crossing_angles: Sequence[str] | None = None,
+    workers: int = 1,
 ) -> list[dict[str, float | int | str]]:
     """Run a synthetic stress sweep and return aggregate rows."""
 
     if num_trials <= 0:
         raise ValueError("num_trials must be positive")
+    if workers <= 0:
+        raise ValueError("workers must be positive")
 
     factors = list(
         iter_stress_factors(
@@ -130,23 +136,19 @@ def run_stress_sweep(
         )
     )
 
+    jobs = [
+        (factor_index, factor, num_trials, base_seed, tuple(methods))
+        for factor_index, factor in enumerate(factors)
+    ]
+    if workers == 1:
+        factor_rows = [_run_stress_factor(job) for job in jobs]
+    else:
+        with mp.Pool(processes=workers) as pool:
+            factor_rows = pool.map(_run_stress_factor, jobs)
+
     rows: list[dict[str, float | int | str]] = []
-    for factor_index, factor in enumerate(factors):
-        method_summaries: dict[str, list[dict[str, float]]] = {method: [] for method in methods}
-        for trial in range(num_trials):
-            seed = base_seed + 1000 * factor_index + trial
-            config = stress_scenario_config(factor, seed=seed)
-            scenario = generate_two_target_merge_split(config)
-            factories = _method_factories(scenario)
-            for method in methods:
-                start = perf_counter()
-                result = factories[method]()
-                elapsed = perf_counter() - start
-                method_summaries[method].append(_summarize_result(scenario, result, elapsed))
-
-        for method, summaries in method_summaries.items():
-            rows.append(_stress_row(factor, method, summaries, num_trials))
-
+    for rows_for_factor in factor_rows:
+        rows.extend(rows_for_factor)
     return rows
 
 
@@ -258,6 +260,28 @@ def write_stress_artifacts(
             rows,
             figure_dir / "stress_label_recovery_heatmaps.png",
         )
+
+
+def _run_stress_factor(
+    job: tuple[int, StressFactor, int, int, tuple[str, ...]],
+) -> list[dict[str, float | int | str]]:
+    factor_index, factor, num_trials, base_seed, methods = job
+    method_summaries: dict[str, list[dict[str, float]]] = {method: [] for method in methods}
+    for trial in range(num_trials):
+        seed = base_seed + 1000 * factor_index + trial
+        config = stress_scenario_config(factor, seed=seed)
+        scenario = generate_two_target_merge_split(config)
+        factories = _method_factories(scenario)
+        for method in methods:
+            start = perf_counter()
+            result = factories[method]()
+            elapsed = perf_counter() - start
+            method_summaries[method].append(_summarize_result(scenario, result, elapsed))
+
+    return [
+        _stress_row(factor, method, summaries, num_trials)
+        for method, summaries in method_summaries.items()
+    ]
 
 
 def format_heatmap_markdown(rows: Sequence[dict[str, float | int | str]]) -> str:
