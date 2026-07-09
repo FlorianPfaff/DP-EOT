@@ -141,6 +141,17 @@ python -m dpeot.experiments.export_stress_sweep \
   --workers 32
 ```
 
+Summarize the full grid into paper-facing tables and aggregate heatmaps:
+
+```bash
+python -m dpeot.experiments.summarize_stress_sweep \
+  --input results/stress_sweep_full/stress_sweep.json \
+  --output-dir results/stress_sweep_full \
+  --figure-dir figures
+```
+
+The summary reports mean post-split recovery, mean group-detection F1, worst-case post-split recovery, failure count, and runtime distribution by method. It also writes aggregate post-split-recovery and group-F1 heatmaps over merge duration and clutter rate, averaging over the other stress factors.
+
 ## GitHub Actions
 
 The `CI and benchmark` workflow runs on push, pull request, and manual dispatch. It installs the package, runs `pytest`, executes the 100-trial two-target benchmark, detector negative controls, and detector threshold sweep, and uploads the `benchmark-results` artifact containing JSON, Markdown, LaTeX result files, and detector calibration figures.
