@@ -84,7 +84,7 @@ The benchmark currently compares:
 
 The MFM ablation is included to separate the value of flexible partition inference from any claim that the Dirichlet process prior itself is necessary.
 
-The headline metrics are post-split identity switches, post-split label recovery, split recovery delay, group-membership accuracy during unresolved scans, unlabeled position error, and runtime per scan. The JSON artifact also keeps total, pre-merge, during-unresolved, post-split, and resolved-period identity-switch diagnostics. Total identity switches are useful for debugging, but post-split switches are the paper-facing identity metric because individual identities may be physically unobservable inside the merged blob.
+The headline metrics are post-split identity switches, post-split label recovery, split recovery delay, group-detection F1, merge-onset delay, split-release delay, false group scans, unlabeled position error, and runtime per scan. Group-detection F1 is membership-aware: it gives credit only when the detected unresolved member set matches truth exactly. The JSON artifact also keeps group-detection precision/recall, missed group scans, wrong-membership scans, group-membership accuracy during unresolved scans, and total, pre-merge, during-unresolved, post-split, and resolved-period identity-switch diagnostics. Total identity switches are useful for debugging, but post-split switches are the paper-facing identity metric because individual identities may be physically unobservable inside the merged blob.
 
 ## Stress sweeps
 
@@ -99,7 +99,7 @@ python -m dpeot.experiments.export_stress_sweep \
   --workers 1
 ```
 
-The heatmap profile compares `distance_collapse`, `dp_x_order`, `mfm_x_order`, `labeled_split_hypothesis`, and `proposed_group_labels` over merge durations `3, 5, 7, 10, 15` and clutter rates `0, 2, 5, 10`. It writes JSON, CSV, Markdown heatmap tables, and `figures/stress_label_recovery_heatmaps.png`.
+The heatmap profile compares `distance_collapse`, `dp_x_order`, `mfm_x_order`, `labeled_split_hypothesis`, and `proposed_group_labels` over merge durations `3, 5, 7, 10, 15` and clutter rates `0, 2, 5, 10`. It writes JSON, CSV, Markdown heatmap tables, and `figures/stress_label_recovery_heatmaps.png`; the JSON/CSV rows include the same group-detection diagnostics as the initial benchmark.
 
 Run the full synthetic stress grid across merge duration, clutter rate, measurement noise, extent similarity, rate asymmetry, and crossing angle:
 

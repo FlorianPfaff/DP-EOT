@@ -22,6 +22,14 @@ ROWS = [
         "split_recovery_delay": 0.0,
         "group_membership": 1.0,
         "group_membership_during_unresolved": 1.0,
+        "group_detection_precision": 1.0,
+        "group_detection_recall": 1.0,
+        "group_detection_f1": 1.0,
+        "merge_onset_delay": 0.0,
+        "split_release_delay": 0.0,
+        "false_group_scans": 0.0,
+        "missed_group_scans": 0.0,
+        "wrong_membership_scans": 0.0,
         "position_error": 0.12345,
         "runtime_ms_per_scan": 0.98765,
     },
@@ -39,6 +47,14 @@ ROWS = [
         "split_recovery_delay": 18.0,
         "group_membership": 0.0,
         "group_membership_during_unresolved": 0.0,
+        "group_detection_precision": 0.0,
+        "group_detection_recall": 0.0,
+        "group_detection_f1": 0.0,
+        "merge_onset_delay": 7.0,
+        "split_release_delay": 0.0,
+        "false_group_scans": 0.0,
+        "missed_group_scans": 7.0,
+        "wrong_membership_scans": 0.0,
         "position_error": 0.54321,
         "runtime_ms_per_scan": 1.23456,
     },
@@ -56,6 +72,14 @@ ROWS = [
         "split_recovery_delay": 0.0,
         "group_membership": 0.0,
         "group_membership_during_unresolved": 0.0,
+        "group_detection_precision": 0.0,
+        "group_detection_recall": 0.0,
+        "group_detection_f1": 0.0,
+        "merge_onset_delay": 7.0,
+        "split_release_delay": 0.0,
+        "false_group_scans": 0.0,
+        "missed_group_scans": 7.0,
+        "wrong_membership_scans": 0.0,
         "position_error": 0.23456,
         "runtime_ms_per_scan": 1.11111,
     },
@@ -69,18 +93,20 @@ def test_markdown_export_contains_human_readable_method_names() -> None:
     assert "MFM x-order" in table
     assert "Labeled split hypothesis" in table
     assert "IDsw-post" in table
+    assert "Group-F1" in table
     assert "0.123" in table
 
 
 def test_latex_export_is_complete_table() -> None:
     table = format_latex_table(ROWS)
 
-    assert "\\begin{table}" in table
+    assert "\\begin{table*}" in table
     assert "Proposed group labels" in table
     assert "MFM x-order" in table
     assert "Labeled split hypothesis" in table
     assert "IDsw-post" in table
-    assert "\\end{table}" in table
+    assert "Group-F1" in table
+    assert "\\end{table*}" in table
 
 
 def test_write_benchmark_artifacts(tmp_path: Path) -> None:

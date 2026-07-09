@@ -15,7 +15,10 @@ METRIC_COLUMNS = [
     ("id_switches_post_split", "IDsw-post"),
     ("label_recovery_post_split", "Rec.-post"),
     ("split_recovery_delay", "Delay"),
-    ("group_membership_during_unresolved", "Group"),
+    ("group_detection_f1", "Group-F1"),
+    ("merge_onset_delay", "Onset"),
+    ("split_release_delay", "Release"),
+    ("false_group_scans", "False"),
     ("position_error", "Pos."),
     ("runtime_ms_per_scan", "ms/scan"),
 ]
@@ -96,23 +99,29 @@ def format_latex_table(rows: list[dict[str, float | str]]) -> str:
     """Return a complete LaTeX table for the benchmark rows."""
 
     lines = [
-        "\\begin{table}[t]",
+        "\\begin{table*}[t]",
         "\\centering",
-        "\\caption{Initial two-target merge/split benchmark. The identity-switch column counts post-split switches only; total, pre-merge, and unresolved-window switch diagnostics are retained in the JSON artifact. Lower is better for post-split identity switches, split delay, position error, and runtime. Higher is better for post-split label recovery and unresolved-window group-membership accuracy.}",
+        "\\small",
+        "\\setlength{\\tabcolsep}{4pt}",
+        "\\caption{Initial two-target merge/split benchmark. The identity-switch column counts post-split switches only; total, pre-merge, and unresolved-window switch diagnostics are retained in the JSON artifact. Lower is better for post-split identity switches, split recovery delay, merge-onset delay, split-release delay, false group scans, position error, and runtime. Higher is better for post-split label recovery and group-detection F1.}",
         "\\label{tab:initial-benchmark}",
-        "\\begin{tabular}{lrrrrrr}",
+        "\\begin{tabular}{@{}lrrrrrrrrr@{}}",
         "\\toprule",
-        f"Method & IDsw-post & Rec.-post & Delay & Group & Pos. & ms {LATEX_LINE_BREAK}",
+        "Method & IDsw-post & Rec.-post & Delay & Group-F1 & "
+        f"Onset & Release & False & Pos. & ms/scan {LATEX_LINE_BREAK}",
         "\\midrule",
     ]
     for row in rows:
         lines.append(
-            "{} & {:.2f} & {:.2f} & {:.2f} & {:.2f} & {:.3f} & {:.3f} {}".format(
+            "{} & {:.2f} & {:.2f} & {:.2f} & {:.2f} & {:.2f} & {:.2f} & {:.2f} & {:.3f} & {:.3f} {}".format(
                 _method_label(str(row["method"])),
                 float(row["id_switches_post_split"]),
                 float(row["label_recovery_post_split"]),
                 float(row["split_recovery_delay"]),
-                float(row["group_membership_during_unresolved"]),
+                float(row["group_detection_f1"]),
+                float(row["merge_onset_delay"]),
+                float(row["split_release_delay"]),
+                float(row["false_group_scans"]),
                 float(row["position_error"]),
                 float(row["runtime_ms_per_scan"]),
                 LATEX_LINE_BREAK,
@@ -121,7 +130,7 @@ def format_latex_table(rows: list[dict[str, float | str]]) -> str:
     lines.extend([
         "\\bottomrule",
         "\\end{tabular}",
-        "\\end{table}",
+        "\\end{table*}",
     ])
     return "\n".join(lines)
 

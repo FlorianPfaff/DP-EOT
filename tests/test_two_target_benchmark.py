@@ -22,6 +22,14 @@ def test_two_target_benchmark_returns_all_methods() -> None:
         assert "label_recovery_post_split" in row
         assert "split_recovery_delay" in row
         assert "group_membership_during_unresolved" in row
+        assert "group_detection_precision" in row
+        assert "group_detection_recall" in row
+        assert "group_detection_f1" in row
+        assert "merge_onset_delay" in row
+        assert "split_release_delay" in row
+        assert "false_group_scans" in row
+        assert "missed_group_scans" in row
+        assert "wrong_membership_scans" in row
         assert row["id_switches"] == row["id_switches_total"]
         assert row["label_recovery"] == row["label_recovery_post_split"]
         assert float(row["runtime_ms_per_scan"]) >= 0.0

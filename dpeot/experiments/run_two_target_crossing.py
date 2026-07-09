@@ -13,6 +13,7 @@ from collections.abc import Callable
 from statistics import mean, pstdev
 from time import perf_counter
 
+from dpeot.metrics.group_detection import group_detection_metrics
 from dpeot.metrics.identity import (
     count_identity_switches,
     count_post_split_identity_switches,
@@ -91,6 +92,14 @@ def run_benchmark(num_trials: int = 100, base_seed: int = 7) -> list[dict[str, f
                 "group_membership_during_unresolved": _avg(
                     summaries, "group_membership_during_unresolved"
                 ),
+                "group_detection_precision": _avg(summaries, "group_detection_precision"),
+                "group_detection_recall": _avg(summaries, "group_detection_recall"),
+                "group_detection_f1": _avg(summaries, "group_detection_f1"),
+                "merge_onset_delay": _avg(summaries, "merge_onset_delay"),
+                "split_release_delay": _avg(summaries, "split_release_delay"),
+                "false_group_scans": _avg(summaries, "false_group_scans"),
+                "missed_group_scans": _avg(summaries, "missed_group_scans"),
+                "wrong_membership_scans": _avg(summaries, "wrong_membership_scans"),
                 "position_error": _avg(summaries, "position_error"),
                 "runtime_ms_per_scan": 1000.0 * _avg(summaries, "runtime_per_scan"),
                 "id_switches_total_std": _std(summaries, "id_switches_total"),
@@ -179,6 +188,8 @@ def _summarize_result(
     unresolved_horizon = len(result.assignments) - split_index + 1
     unresolved_mask = [scan.is_unresolved for scan in scenario.scans]
     unresolved_indices = [i for i, scan in enumerate(scenario.scans) if scan.is_unresolved]
+    true_members = [scan.unresolved_members for scan in scenario.scans]
+    detection = group_detection_metrics(result.group_membership_trace, true_members)
 
     return {
         "id_switches_total": float(count_identity_switches(result.assignments)),
@@ -206,6 +217,16 @@ def _summarize_result(
             [result.group_membership_trace[i] for i in unresolved_indices],
             [scenario.scans[i].unresolved_members for i in unresolved_indices],
         ),
+        "group_detection_precision": detection.precision,
+        "group_detection_recall": detection.recall,
+        "group_detection_f1": detection.f1,
+        "merge_onset_delay": float(
+            detection.merge_onset_delay if detection.merge_onset_delay is not None else 0
+        ),
+        "split_release_delay": float(detection.split_release_delay),
+        "false_group_scans": float(detection.false_group_scans),
+        "missed_group_scans": float(detection.missed_group_scans),
+        "wrong_membership_scans": float(detection.wrong_membership_scans),
         "position_error": mean_unlabeled_position_error(scenario, result),
         "runtime_per_scan": elapsed / len(scenario.scans),
     }
@@ -229,11 +250,14 @@ def _print_rows(rows: list[dict[str, float | str]]) -> None:
         f"{'IDpost':>7s} "
         f"{'recov':>7s} "
         f"{'delay':>7s} "
-        f"{'group':>7s} "
+        f"{'gF1':>7s} "
+        f"{'onset':>7s} "
+        f"{'release':>7s} "
+        f"{'false':>7s} "
         f"{'poserr':>8s} "
         f"{'ms/scan':>8s}"
     )
-    print("-" * 78)
+    print("-" * 104)
     for row in rows:
         print(
             f"{str(row['method']):24s} "
@@ -241,7 +265,10 @@ def _print_rows(rows: list[dict[str, float | str]]) -> None:
             f"{float(row['id_switches_post_split']):7.2f} "
             f"{float(row['label_recovery']):7.2f} "
             f"{float(row['split_delay']):7.2f} "
-            f"{float(row['group_membership']):7.2f} "
+            f"{float(row['group_detection_f1']):7.2f} "
+            f"{float(row['merge_onset_delay']):7.2f} "
+            f"{float(row['split_release_delay']):7.2f} "
+            f"{float(row['false_group_scans']):7.2f} "
             f"{float(row['position_error']):8.3f} "
             f"{float(row['runtime_ms_per_scan']):8.3f}"
         )
