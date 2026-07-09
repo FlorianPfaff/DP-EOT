@@ -113,7 +113,7 @@ python -m dpeot.experiments.export_detector_threshold_sweep \
   --figure-dir figures
 ```
 
-The exporter writes JSON, CSV, Markdown, a LaTeX table at the operating threshold, and `figures/detector_threshold_sweep.png`. The intended readout is a detector tradeoff: true-merge recall should remain high while no-merge false group scan rates remain low.
+The detector uses `Delta_k = log L_group,k - log L_resolved,k` and declares a group when `Delta_k > tau`. The default sweep is `tau in {-10, -5, 0, 5, 10}`. The exporter writes JSON, CSV, Markdown, a LaTeX table at the operating threshold, and `figures/detector_threshold_sweep.png`. The intended readout is a detector tradeoff: true-merge recall should remain high while no-merge false group scans remain low.
 
 ## Stress sweeps
 

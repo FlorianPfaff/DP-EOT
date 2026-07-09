@@ -1,11 +1,16 @@
 from pathlib import Path
 
 from dpeot.experiments.export_detector_threshold_sweep import (
+    THRESHOLDS,
     format_latex_table,
     format_markdown_table,
     run_threshold_sweep,
     write_threshold_sweep_artifacts,
 )
+
+
+def test_default_thresholds_match_detector_calibration_grid() -> None:
+    assert THRESHOLDS == (-10.0, -5.0, 0.0, 5.0, 10.0)
 
 
 def test_threshold_sweep_runs_true_and_no_merge_cases() -> None:
@@ -65,6 +70,7 @@ def test_threshold_sweep_exports_tables(tmp_path: Path) -> None:
 
     assert "Merge Detector Threshold Sweep" in markdown
     assert "Near miss" in markdown
+    assert "False scans" in markdown
     assert "\\begin{table*}" in latex
     assert "False-rate" in latex
 

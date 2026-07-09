@@ -1,10 +1,10 @@
 """Export merge-detector threshold calibration artifacts.
 
-The proposed group-label tracker declares an unresolved group when the group
-hypothesis beats the resolved-target hypothesis by a threshold. This exporter
-sweeps that threshold on one true-merge scenario and several no-merge controls
-so that the detector can be evaluated as a detector rather than only as a
-tracker.
+The proposed group-label tracker declares an unresolved group when
+Delta_k = log L_group,k - log L_resolved,k exceeds a threshold tau. This
+exporter sweeps that threshold on one true-merge scenario and several no-merge
+controls so that the detector can be evaluated as a detector rather than only as
+a tracker.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ from dpeot.scenarios.two_target_merge_split import ScenarioConfig
 from dpeot.tracking.merge_split_filter import FilterConfig, run_detected_group_filter
 
 
-THRESHOLDS = (-25.0, -20.0, -15.0, -10.0, -5.0, 0.0, 5.0, 10.0)
+THRESHOLDS = (-10.0, -5.0, 0.0, 5.0, 10.0)
 SCENARIOS = tuple(SCENARIO_FACTORIES)
 CSV_FIELDS = (
     "scenario",
@@ -154,18 +154,19 @@ def format_markdown_table(rows: list[dict[str, float | int | str]]) -> str:
     lines = [
         "# Merge Detector Threshold Sweep",
         "",
-        "Recall should be high for the true merge. False-rate should be low for no-merge controls.",
+        "Recall should be high for the true merge. False group scans should be low for no-merge controls.",
         "",
-        "| Scenario | Threshold | Recall | Group-F1 | False-rate | Active-rate | Onset | Release | ms/scan |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| Scenario | Threshold | Recall | Group-F1 | False scans | False-rate | Active-rate | Onset | Release | ms/scan |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for row in rows:
         lines.append(
-            "| {} | {:.1f} | {:.2f} | {:.2f} | {:.3f} | {:.3f} | {:.2f} | {:.2f} | {:.3f} |".format(
+            "| {} | {:.1f} | {:.2f} | {:.2f} | {:.2f} | {:.3f} | {:.3f} | {:.2f} | {:.2f} | {:.3f} |".format(
                 _scenario_label(str(row["scenario"])),
                 float(row["threshold"]),
                 float(row["group_detection_recall"]),
                 float(row["group_detection_f1"]),
+                float(row["false_group_scans"]),
                 float(row["false_group_scan_rate"]),
                 float(row["active_group_scan_rate"]),
                 float(row["merge_onset_delay"]),
@@ -187,20 +188,21 @@ def format_latex_table(rows: list[dict[str, float | int | str]]) -> str:
         "\\centering",
         "\\small",
         "\\setlength{\\tabcolsep}{4pt}",
-        "\\caption{Merge-detector threshold calibration at the operating threshold. True merge should have high recall; no-merge controls should have low false group rates.}",
+        "\\caption{Merge-detector threshold calibration at the operating threshold. True merge should have high recall; no-merge controls should have low false group counts and rates.}",
         "\\label{tab:detector-threshold-calibration}",
-        "\\begin{tabular}{@{}lrrrrrrr@{}}",
+        "\\begin{tabular}{@{}lrrrrrrrr@{}}",
         "\\toprule",
-        f"Scenario & $\\tau$ & Recall & Group-F1 & False-rate & Active-rate & Onset & Release {line_break}",
+        f"Scenario & $\\tau$ & Recall & Group-F1 & False & False-rate & Active-rate & Onset & Release {line_break}",
         "\\midrule",
     ]
     for row in selected:
         lines.append(
-            "{} & {:.1f} & {:.2f} & {:.2f} & {:.3f} & {:.3f} & {:.2f} & {:.2f} {}".format(
+            "{} & {:.1f} & {:.2f} & {:.2f} & {:.2f} & {:.3f} & {:.3f} & {:.2f} & {:.2f} {}".format(
                 _scenario_label(str(row["scenario"])),
                 float(row["threshold"]),
                 float(row["group_detection_recall"]),
                 float(row["group_detection_f1"]),
+                float(row["false_group_scans"]),
                 float(row["false_group_scan_rate"]),
                 float(row["active_group_scan_rate"]),
                 float(row["merge_onset_delay"]),
@@ -217,7 +219,7 @@ def format_latex_table(rows: list[dict[str, float | int | str]]) -> str:
 
 
 def plot_threshold_sweep(rows: Sequence[dict[str, float | int | str]], output_path: Path) -> None:
-    """Plot true-merge recall and no-merge false activation rates by threshold."""
+    """Plot a ROC-style recall-vs-false-group-count threshold tradeoff."""
 
     import matplotlib
 
@@ -228,32 +230,30 @@ def plot_threshold_sweep(rows: Sequence[dict[str, float | int | str]], output_pa
     fig, axis = plt.subplots(figsize=(6.8, 4.2), constrained_layout=True)
 
     true_rows = [row for row in rows if row["scenario"] == "true_merge"]
-    if true_rows:
-        axis.plot(
-            thresholds,
-            [_metric_at(true_rows, threshold, "group_detection_recall") for threshold in thresholds],
-            marker="o",
-            label="true merge recall",
+    no_merge_rows = [row for row in rows if row["scenario"] != "true_merge"]
+    x_values = [
+        _mean_metric_at(no_merge_rows, threshold, "false_group_scans")
+        for threshold in thresholds
+    ]
+    y_values = [
+        _metric_at(true_rows, threshold, "group_detection_recall")
+        for threshold in thresholds
+    ]
+
+    axis.plot(x_values, y_values, marker="o")
+    for threshold, x_value, y_value in zip(thresholds, x_values, y_values):
+        axis.annotate(
+            f"$\\tau={threshold:g}$",
+            (x_value, y_value),
+            textcoords="offset points",
+            xytext=(5, -14),
+            fontsize=8,
         )
 
-    for scenario in SCENARIOS:
-        if scenario == "true_merge":
-            continue
-        scenario_rows = [row for row in rows if row["scenario"] == scenario]
-        if not scenario_rows:
-            continue
-        axis.plot(
-            thresholds,
-            [_metric_at(scenario_rows, threshold, "false_group_scan_rate") for threshold in thresholds],
-            marker="x",
-            label=f"{_scenario_label(scenario)} false-rate",
-        )
-
-    axis.set_xlabel("merge-score threshold")
-    axis.set_ylabel("rate")
-    axis.set_ylim(-0.02, 1.02)
+    axis.set_xlabel("mean no-merge false group scans per trial")
+    axis.set_ylabel("true-merge group recall")
+    axis.set_ylim(0.9, 1.02)
     axis.grid(True, alpha=0.25)
-    axis.legend(loc="best", fontsize=8)
     fig.savefig(output_path, dpi=200)
     plt.close(fig)
 
@@ -315,12 +315,26 @@ def _aggregate_row(
 
 def _write_csv(path: Path, rows: Sequence[dict[str, float | int | str]]) -> None:
     with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=CSV_FIELDS, extrasaction="ignore")
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=CSV_FIELDS,
+            extrasaction="ignore",
+            lineterminator="\n",
+        )
         writer.writeheader()
         writer.writerows(rows)
 
 
 def _metric_at(
+    rows: Sequence[dict[str, float | int | str]],
+    threshold: float,
+    key: str,
+) -> float:
+    matching = [float(row[key]) for row in rows if float(row["threshold"]) == threshold]
+    return mean(matching) if matching else float("nan")
+
+
+def _mean_metric_at(
     rows: Sequence[dict[str, float | int | str]],
     threshold: float,
     key: str,
