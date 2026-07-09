@@ -9,7 +9,9 @@ def test_two_target_benchmark_returns_all_methods() -> None:
         "distance_collapse",
         "dp_x_order",
         "mfm_x_order",
+        "labeled_split_hypothesis",
         "proposed_group_labels",
+        "oracle_group_labels",
         "oracle_identity",
     }
     for row in rows:

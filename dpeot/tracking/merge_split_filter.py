@@ -34,6 +34,9 @@ class FilterConfig:
     missed_cell_log_score: float = -35.0
     collapse_velocity_damping: float = 0.0
     min_assignment_rate_fraction: float = 0.25
+    merge_score_threshold: float = 0.0
+    group_transition_log_prior: float = -15.0
+    max_labeled_hypotheses: int = 2
 
 
 @dataclass(frozen=True)
@@ -44,6 +47,25 @@ class FilterRunResult:
     assignments: list[dict[Label, Label]]
     estimated_positions: list[dict[Label, np.ndarray]]
     group_membership_trace: list[frozenset[Label]]
+
+
+@dataclass(frozen=True)
+class LabeledHypothesis:
+    """One labeled resolved-target hypothesis for the MHT-style baseline."""
+
+    targets: tuple[ResolvedTarget, ...]
+    log_weight: float = 0.0
+
+
+@dataclass(frozen=True)
+class MergeDecision:
+    """Resolved-vs-group decision for one scan."""
+
+    use_group: bool
+    resolved_score: float
+    group_score: float
+    resolved_assignment: dict[Label, list[int]]
+    group_cell: list[int] | None
 
 
 def run_identity_aware_group_filter(
@@ -103,6 +125,142 @@ def run_identity_aware_group_filter(
     assignments = truth_to_estimated_label_assignments(scenario, estimated_positions)
     return FilterRunResult(
         method_name="proposed_group_labels",
+        assignments=assignments,
+        estimated_positions=estimated_positions,
+        group_membership_trace=group_members,
+    )
+
+
+def run_detected_group_filter(
+    scenario: Scenario,
+    partitioner: Partitioner,
+    config: FilterConfig | None = None,
+) -> FilterRunResult:
+    """Run the identity-aware filter with a likelihood-ratio merge detector.
+
+    Unlike :func:`run_identity_aware_group_filter`, this version does not read
+    ``scan.is_unresolved`` while filtering. Each scan compares the best resolved
+    assignment against an unresolved-group hypothesis and enters the group state
+    only when the group score wins by the configured threshold.
+    """
+
+    config = config or FilterConfig()
+    targets = _initial_targets(scenario)
+    estimated_positions: list[dict[Label, np.ndarray]] = []
+    group_members: list[frozenset[Label]] = []
+    group: UnresolvedGroup | None = None
+
+    for scan in scenario.scans:
+        if scan.k > 0:
+            targets = tuple(
+                target.predict(scenario.config.dt, process_noise=config.process_noise)
+                for target in targets
+            )
+
+        cells = partitioner(scan)
+        decision = _merge_decision(scan.measurements, cells, targets, config)
+
+        if decision.use_group:
+            group = merge_targets(targets) if group is None else merge_targets(targets)
+            if decision.group_cell is not None:
+                group = _update_group_with_cell(
+                    group, scan.measurements, decision.group_cell, config.group_update_gain
+                )
+            estimated_positions.append(_positions_from_targets(targets))
+            group_members.append(group.member_labels)
+            continue
+
+        group = None
+        targets = tuple(
+            _update_target_with_cell(
+                target,
+                scan.measurements,
+                decision.resolved_assignment.get(target.label, []),
+                config.update_gain,
+            )
+            for target in targets
+        )
+        estimated_positions.append(_positions_from_targets(targets))
+        group_members.append(frozenset())
+
+    assignments = truth_to_estimated_label_assignments(scenario, estimated_positions)
+    return FilterRunResult(
+        method_name="proposed_group_labels",
+        assignments=assignments,
+        estimated_positions=estimated_positions,
+        group_membership_trace=group_members,
+    )
+
+
+def run_labeled_split_hypothesis_baseline(
+    scenario: Scenario,
+    partitioner: Partitioner,
+    config: FilterConfig | None = None,
+) -> FilterRunResult:
+    """Run a compact labeled-hypothesis baseline without DP machinery.
+
+    The baseline keeps the best resolved label-to-cell hypotheses and scores
+    both label permutations after ambiguous merge/split intervals. It does not
+    carry an explicit unresolved-group member set, so group-membership accuracy
+    remains a diagnostic where the proposed representation has an advantage.
+    """
+
+    config = config or FilterConfig()
+    hypotheses = [LabeledHypothesis(_initial_targets(scenario))]
+    estimated_positions: list[dict[Label, np.ndarray]] = []
+    group_members: list[frozenset[Label]] = []
+
+    for scan in scenario.scans:
+        predicted = [
+            LabeledHypothesis(
+                tuple(
+                    target.predict(scenario.config.dt, process_noise=config.process_noise)
+                    for target in hypothesis.targets
+                )
+                if scan.k > 0
+                else hypothesis.targets,
+                hypothesis.log_weight,
+            )
+            for hypothesis in hypotheses
+        ]
+
+        cells = partitioner(scan)
+        branched: list[LabeledHypothesis] = []
+        for hypothesis in predicted:
+            decision = _merge_decision(scan.measurements, cells, hypothesis.targets, config)
+            if decision.use_group:
+                branched.append(
+                    LabeledHypothesis(
+                        hypothesis.targets,
+                        hypothesis.log_weight + decision.group_score,
+                    )
+                )
+                continue
+
+            for assignment, score in _resolved_assignment_candidates(
+                scan.measurements, cells, hypothesis.targets, config
+            ):
+                updated_targets = tuple(
+                    _update_target_with_cell(
+                        target,
+                        scan.measurements,
+                        assignment.get(target.label, []),
+                        config.update_gain,
+                    )
+                    for target in hypothesis.targets
+                )
+                branched.append(
+                    LabeledHypothesis(updated_targets, hypothesis.log_weight + score)
+                )
+
+        hypotheses = _prune_labeled_hypotheses(branched, config.max_labeled_hypotheses)
+        best = hypotheses[0]
+        estimated_positions.append(_positions_from_targets(best.targets))
+        group_members.append(frozenset())
+
+    assignments = truth_to_estimated_label_assignments(scenario, estimated_positions)
+    return FilterRunResult(
+        method_name="labeled_split_hypothesis",
         assignments=assignments,
         estimated_positions=estimated_positions,
         group_membership_trace=group_members,
@@ -387,9 +545,57 @@ def _assign_cells_to_targets(
     targets: Sequence[ResolvedTarget],
     config: FilterConfig,
 ) -> dict[Label, list[int]]:
-    candidate_indices: list[int | None] = list(range(len(cells))) + [None]
-    best_score = -inf
-    best_assignment: dict[Label, list[int]] = {target.label: [] for target in targets}
+    return _best_resolved_assignment(measurements, cells, targets, config)[0]
+
+
+def _merge_decision(
+    measurements: np.ndarray,
+    cells: Sequence[Sequence[int]],
+    targets: Sequence[ResolvedTarget],
+    config: FilterConfig,
+) -> MergeDecision:
+    resolved_assignment, resolved_score = _best_resolved_assignment(
+        measurements, cells, targets, config, allow_missed=False
+    )
+    group_cell, group_score = _best_group_hypothesis(measurements, cells, targets, config)
+    use_group = group_cell is not None and (
+        group_score - resolved_score > config.merge_score_threshold
+    )
+    return MergeDecision(
+        use_group=use_group,
+        resolved_score=resolved_score,
+        group_score=group_score,
+        resolved_assignment=resolved_assignment,
+        group_cell=group_cell,
+    )
+
+
+def _best_resolved_assignment(
+    measurements: np.ndarray,
+    cells: Sequence[Sequence[int]],
+    targets: Sequence[ResolvedTarget],
+    config: FilterConfig,
+    allow_missed: bool = True,
+) -> tuple[dict[Label, list[int]], float]:
+    candidates = _resolved_assignment_candidates(
+        measurements, cells, targets, config, allow_missed=allow_missed
+    )
+    if not candidates:
+        return {target.label: [] for target in targets}, -inf
+    return candidates[0]
+
+
+def _resolved_assignment_candidates(
+    measurements: np.ndarray,
+    cells: Sequence[Sequence[int]],
+    targets: Sequence[ResolvedTarget],
+    config: FilterConfig,
+    allow_missed: bool = True,
+) -> list[tuple[dict[Label, list[int]], float]]:
+    candidate_indices: list[int | None] = list(range(len(cells)))
+    if allow_missed:
+        candidate_indices.append(None)
+    candidates: list[tuple[dict[Label, list[int]], float]] = []
 
     for choice in product(candidate_indices, repeat=len(targets)):
         nonempty_choice = [index for index in choice if index is not None]
@@ -410,11 +616,34 @@ def _assign_cells_to_targets(
             score += _score_cell_for_target(measurements, cell, target, config)
             assignment[target.label] = cell
 
-        if score > best_score:
-            best_score = score
-            best_assignment = assignment
+        if score > -inf:
+            candidates.append((assignment, score))
 
-    return best_assignment
+    return sorted(candidates, key=lambda candidate: candidate[1], reverse=True)
+
+
+def _best_group_hypothesis(
+    measurements: np.ndarray,
+    cells: Sequence[Sequence[int]],
+    targets: Sequence[ResolvedTarget],
+    config: FilterConfig,
+) -> tuple[list[int] | None, float]:
+    if not cells:
+        return None, -inf
+
+    group = merge_targets(tuple(targets))
+    scored_cells = [
+        (
+            list(cell),
+            _score_cell_for_group(measurements, cell, group, config)
+            + config.group_transition_log_prior,
+        )
+        for cell in cells
+        if _cell_count_is_plausible(len(cell), group.measurement_rate, config)
+    ]
+    if not scored_cells:
+        return None, -inf
+    return max(scored_cells, key=lambda item: item[1])
 
 
 def _best_group_cell(
@@ -423,18 +652,14 @@ def _best_group_cell(
     group: UnresolvedGroup,
     config: FilterConfig,
 ) -> list[int] | None:
-    if not cells:
+    scored_cells = [
+        (list(cell), _score_cell_for_group(measurements, cell, group, config))
+        for cell in cells
+        if _cell_count_is_plausible(len(cell), group.measurement_rate, config)
+    ]
+    if not scored_cells:
         return None
-    pseudo_target = ResolvedTarget(
-        label="group",
-        mean=group.mean,
-        covariance=group.covariance,
-        extent=group.extent,
-        measurement_rate=group.measurement_rate,
-    )
-    return list(
-        max(cells, key=lambda cell: _score_cell_for_target(measurements, cell, pseudo_target, config))
-    )
+    return max(scored_cells, key=lambda item: item[1])[0]
 
 
 def _cell_count_is_plausible_for_target(
@@ -442,8 +667,16 @@ def _cell_count_is_plausible_for_target(
     target: ResolvedTarget,
     config: FilterConfig,
 ) -> bool:
-    min_count = max(2, int(round(config.min_assignment_rate_fraction * target.measurement_rate)))
-    return len(cell) >= min_count
+    return _cell_count_is_plausible(len(cell), target.measurement_rate, config)
+
+
+def _cell_count_is_plausible(
+    cell_count: int,
+    expected_rate: float,
+    config: FilterConfig,
+) -> bool:
+    min_count = max(2, int(round(config.min_assignment_rate_fraction * expected_rate)))
+    return cell_count >= min_count
 
 
 def _score_cell_for_target(
@@ -460,6 +693,39 @@ def _score_cell_for_target(
         expected_rate=target.measurement_rate,
         covariance=covariance,
     )
+
+
+def _score_cell_for_group(
+    measurements: np.ndarray,
+    cell: Sequence[int],
+    group: UnresolvedGroup,
+    config: FilterConfig,
+) -> float:
+    covariance = (
+        group.extent
+        + group.covariance[:2, :2]
+        + (config.measurement_noise_scale**2) * np.eye(2)
+    )
+    return log_cell_likelihood(
+        measurements=measurements,
+        cell=cell,
+        predicted_position=group.mean[:2],
+        expected_rate=group.measurement_rate,
+        covariance=covariance,
+    )
+
+
+def _prune_labeled_hypotheses(
+    hypotheses: Sequence[LabeledHypothesis],
+    max_hypotheses: int,
+) -> list[LabeledHypothesis]:
+    if max_hypotheses < 1:
+        raise ValueError("max_labeled_hypotheses must be at least one")
+    if not hypotheses:
+        raise ValueError("labeled hypothesis baseline produced no hypotheses")
+    return sorted(hypotheses, key=lambda hypothesis: hypothesis.log_weight, reverse=True)[
+        :max_hypotheses
+    ]
 
 
 def _targets_from_x_order_cells(

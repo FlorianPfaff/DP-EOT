@@ -32,8 +32,10 @@ from dpeot.scenarios.two_target_merge_split import (
 from dpeot.tracking.merge_split_filter import (
     FilterRunResult,
     mean_unlabeled_position_error,
+    run_detected_group_filter,
     run_distance_collapse_baseline,
     run_identity_aware_group_filter,
+    run_labeled_split_hypothesis_baseline,
     run_oracle_identity_baseline,
     run_x_order_clustering_baseline,
 )
@@ -112,7 +114,15 @@ def _method_factories(scenario: Scenario) -> dict[str, Callable[[], FilterRunRes
             scenario,
             partitioner=_mfm_partitioner_factory(scenario),
         ),
-        "proposed_group_labels": lambda: run_identity_aware_group_filter(
+        "labeled_split_hypothesis": lambda: run_labeled_split_hypothesis_baseline(
+            scenario,
+            partitioner=_distance_partitioner,
+        ),
+        "proposed_group_labels": lambda: run_detected_group_filter(
+            scenario,
+            partitioner=_distance_partitioner,
+        ),
+        "oracle_group_labels": lambda: run_identity_aware_group_filter(
             scenario,
             partitioner=_distance_partitioner,
         ),

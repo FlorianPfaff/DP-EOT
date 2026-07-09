@@ -77,7 +77,9 @@ The benchmark currently compares:
 - `distance_collapse`: a baseline that loses identity memory during the unresolved interval;
 - `dp_x_order`: an unlabeled Dirichlet-process-style partition baseline with canonical left-to-right labels;
 - `mfm_x_order`: an unlabeled finite-cardinality MFM-style partition baseline with canonical left-to-right labels;
-- `proposed_group_labels`: the minimal identity-aware unresolved-group filter;
+- `labeled_split_hypothesis`: a compact labeled hypothesis baseline that keeps competing label-to-cell assignments through the merge;
+- `proposed_group_labels`: the identity-aware unresolved-group filter with a likelihood-ratio merge detector;
+- `oracle_group_labels`: the same group-label filter with the unresolved interval supplied as a controlled diagnostic;
 - `oracle_identity`: a perfect-identity upper bound.
 
 The MFM ablation is included to separate the value of flexible partition inference from any claim that the Dirichlet process prior itself is necessary.
