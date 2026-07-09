@@ -23,6 +23,7 @@ METRIC_COLUMNS = [
 METHOD_LABELS = {
     "distance_collapse": "Distance collapse",
     "dp_x_order": "DP x-order",
+    "mfm_x_order": "MFM x-order",
     "proposed_group_labels": "Proposed group labels",
     "oracle_identity": "Oracle identity",
 }
