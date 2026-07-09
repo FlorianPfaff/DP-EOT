@@ -8,7 +8,11 @@ from collections.abc import Iterable, Mapping, Sequence
 Label = str
 
 
-def count_identity_switches(assignments: Iterable[Mapping[Label, Label]]) -> int:
+def count_identity_switches(
+    assignments: Iterable[Mapping[Label, Label]],
+    start: int | None = None,
+    end: int | None = None,
+) -> int:
     """Count changes in estimated identity for each true label over time.
 
     Parameters
@@ -18,15 +22,59 @@ def count_identity_switches(assignments: Iterable[Mapping[Label, Label]]) -> int
         are ignored for that scan. A switch is counted when a true label was
         assigned to one estimated label in the previous visible scan and to a
         different estimated label in the current scan.
+    start, end:
+        Optional zero-based half-open window. The first assignment inside the
+        window initializes the previous-label state, so transitions across
+        window boundaries are deliberately not counted.
     """
 
+    window = _assignment_window(assignments, start=start, end=end)
     previous: dict[Label, Label] = {}
     switches = 0
-    for assignment in assignments:
+    for assignment in window:
         for true_label, estimated_label in assignment.items():
             if true_label in previous and previous[true_label] != estimated_label:
                 switches += 1
             previous[true_label] = estimated_label
+    return switches
+
+
+def count_post_split_identity_switches(
+    assignments: Sequence[Mapping[Label, Label]],
+    split_index: int,
+) -> int:
+    """Count identity switches after targets are resolved again."""
+
+    return count_identity_switches(assignments, start=split_index)
+
+
+def count_resolved_period_identity_switches(
+    assignments: Sequence[Mapping[Label, Label]],
+    unresolved_mask: Sequence[bool],
+) -> int:
+    """Count switches within contiguous resolved periods only.
+
+    Transitions into or out of unresolved scans are not counted, because
+    individual identities may be physically unobservable in the merged blob.
+    """
+
+    if len(assignments) != len(unresolved_mask):
+        raise ValueError("assignments and unresolved_mask must have the same length")
+
+    switches = 0
+    window_start: int | None = None
+    for index, is_unresolved in enumerate(unresolved_mask):
+        if is_unresolved:
+            if window_start is not None:
+                switches += count_identity_switches(assignments, window_start, index)
+                window_start = None
+            continue
+        if window_start is None:
+            window_start = index
+
+    if window_start is not None:
+        switches += count_identity_switches(assignments, window_start, len(assignments))
+
     return switches
 
 
@@ -81,3 +129,20 @@ def group_membership_accuracy(
         else:
             scores.append(len(estimated & truth) / len(union))
     return sum(scores) / len(scores) if scores else 0.0
+
+
+def _assignment_window(
+    assignments: Iterable[Mapping[Label, Label]],
+    start: int | None,
+    end: int | None,
+) -> list[Mapping[Label, Label]]:
+    assignment_list = list(assignments)
+    lower = 0 if start is None else start
+    upper = len(assignment_list) if end is None else end
+    if lower < 0:
+        raise ValueError("start must be nonnegative")
+    if upper < lower:
+        raise ValueError("end must be greater than or equal to start")
+    if upper > len(assignment_list):
+        raise ValueError("end must be no larger than the number of assignments")
+    return assignment_list[lower:upper]

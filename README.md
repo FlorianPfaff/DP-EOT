@@ -82,7 +82,7 @@ The benchmark currently compares:
 
 The MFM ablation is included to separate the value of flexible partition inference from any claim that the Dirichlet process prior itself is necessary.
 
-The printed metrics are identity switches, post-split label recovery, split recovery delay, group-membership accuracy during unresolved scans, unlabeled position error, and runtime per scan.
+The headline metrics are post-split identity switches, post-split label recovery, split recovery delay, group-membership accuracy during unresolved scans, unlabeled position error, and runtime per scan. The JSON artifact also keeps total, pre-merge, during-unresolved, post-split, and resolved-period identity-switch diagnostics. Total identity switches are useful for debugging, but post-split switches are the paper-facing identity metric because individual identities may be physically unobservable inside the merged blob.
 
 ## GitHub Actions
 

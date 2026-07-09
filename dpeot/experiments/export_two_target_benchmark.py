@@ -12,10 +12,10 @@ from dpeot.experiments.run_two_target_crossing import run_benchmark
 
 METRIC_COLUMNS = [
     ("method", "Method"),
-    ("id_switches", "IDsw"),
-    ("label_recovery", "Rec."),
-    ("split_delay", "Delay"),
-    ("group_membership", "Group"),
+    ("id_switches_post_split", "IDsw-post"),
+    ("label_recovery_post_split", "Rec.-post"),
+    ("split_recovery_delay", "Delay"),
+    ("group_membership_during_unresolved", "Group"),
     ("position_error", "Pos."),
     ("runtime_ms_per_scan", "ms/scan"),
 ]
@@ -96,21 +96,21 @@ def format_latex_table(rows: list[dict[str, float | str]]) -> str:
     lines = [
         "\\begin{table}[t]",
         "\\centering",
-        "\\caption{Initial two-target merge/split benchmark. Lower is better for identity switches, split delay, position error, and runtime. Higher is better for label recovery and group-membership accuracy.}",
+        "\\caption{Initial two-target merge/split benchmark. The identity-switch column counts post-split switches only; total, pre-merge, and unresolved-window switch diagnostics are retained in the JSON artifact. Lower is better for post-split identity switches, split delay, position error, and runtime. Higher is better for post-split label recovery and unresolved-window group-membership accuracy.}",
         "\\label{tab:initial-benchmark}",
         "\\begin{tabular}{lrrrrrr}",
         "\\toprule",
-        f"Method & IDsw & Rec. & Delay & Group & Pos. & ms {LATEX_LINE_BREAK}",
+        f"Method & IDsw-post & Rec.-post & Delay & Group & Pos. & ms {LATEX_LINE_BREAK}",
         "\\midrule",
     ]
     for row in rows:
         lines.append(
             "{} & {:.2f} & {:.2f} & {:.2f} & {:.2f} & {:.3f} & {:.3f} {}".format(
                 _method_label(str(row["method"])),
-                float(row["id_switches"]),
-                float(row["label_recovery"]),
-                float(row["split_delay"]),
-                float(row["group_membership"]),
+                float(row["id_switches_post_split"]),
+                float(row["label_recovery_post_split"]),
+                float(row["split_recovery_delay"]),
+                float(row["group_membership_during_unresolved"]),
                 float(row["position_error"]),
                 float(row["runtime_ms_per_scan"]),
                 LATEX_LINE_BREAK,

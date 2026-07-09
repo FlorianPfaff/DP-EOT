@@ -15,6 +15,8 @@ from time import perf_counter
 
 from dpeot.metrics.identity import (
     count_identity_switches,
+    count_post_split_identity_switches,
+    count_resolved_period_identity_switches,
     group_membership_accuracy,
     label_recovery_accuracy,
     split_recovery_delay,
@@ -71,13 +73,26 @@ def run_benchmark(num_trials: int = 100, base_seed: int = 7) -> list[dict[str, f
         rows.append(
             {
                 "method": name,
-                "id_switches": _avg(summaries, "id_switches"),
-                "label_recovery": _avg(summaries, "label_recovery"),
-                "split_delay": _avg(summaries, "split_delay"),
-                "group_membership": _avg(summaries, "group_membership"),
+                "id_switches": _avg(summaries, "id_switches_total"),
+                "id_switches_total": _avg(summaries, "id_switches_total"),
+                "id_switches_pre_merge": _avg(summaries, "id_switches_pre_merge"),
+                "id_switches_during_unresolved": _avg(
+                    summaries, "id_switches_during_unresolved"
+                ),
+                "id_switches_post_split": _avg(summaries, "id_switches_post_split"),
+                "id_switches_resolved": _avg(summaries, "id_switches_resolved"),
+                "label_recovery": _avg(summaries, "label_recovery_post_split"),
+                "label_recovery_post_split": _avg(summaries, "label_recovery_post_split"),
+                "split_delay": _avg(summaries, "split_recovery_delay"),
+                "split_recovery_delay": _avg(summaries, "split_recovery_delay"),
+                "group_membership": _avg(summaries, "group_membership_during_unresolved"),
+                "group_membership_during_unresolved": _avg(
+                    summaries, "group_membership_during_unresolved"
+                ),
                 "position_error": _avg(summaries, "position_error"),
                 "runtime_ms_per_scan": 1000.0 * _avg(summaries, "runtime_per_scan"),
-                "id_switches_std": _std(summaries, "id_switches"),
+                "id_switches_total_std": _std(summaries, "id_switches_total"),
+                "id_switches_post_split_std": _std(summaries, "id_switches_post_split"),
             }
         )
     return rows
@@ -147,17 +162,37 @@ def _summarize_result(
     elapsed: float,
 ) -> dict[str, float]:
     labels = scenario.labels
+    merge_start = scenario.config.merge_start
     split_index = scenario.config.merge_end + 1
     post_split_assignments = result.assignments[split_index:]
     split_delay = split_recovery_delay(result.assignments, labels, split_index)
     unresolved_horizon = len(result.assignments) - split_index + 1
+    unresolved_mask = [scan.is_unresolved for scan in scenario.scans]
     unresolved_indices = [i for i, scan in enumerate(scenario.scans) if scan.is_unresolved]
 
     return {
-        "id_switches": float(count_identity_switches(result.assignments)),
-        "label_recovery": label_recovery_accuracy(post_split_assignments, labels),
-        "split_delay": float(split_delay if split_delay is not None else unresolved_horizon),
-        "group_membership": group_membership_accuracy(
+        "id_switches_total": float(count_identity_switches(result.assignments)),
+        "id_switches_pre_merge": float(
+            count_identity_switches(result.assignments, end=merge_start)
+        ),
+        "id_switches_during_unresolved": float(
+            count_identity_switches(
+                result.assignments,
+                start=merge_start,
+                end=split_index,
+            )
+        ),
+        "id_switches_post_split": float(
+            count_post_split_identity_switches(result.assignments, split_index)
+        ),
+        "id_switches_resolved": float(
+            count_resolved_period_identity_switches(result.assignments, unresolved_mask)
+        ),
+        "label_recovery_post_split": label_recovery_accuracy(post_split_assignments, labels),
+        "split_recovery_delay": float(
+            split_delay if split_delay is not None else unresolved_horizon
+        ),
+        "group_membership_during_unresolved": group_membership_accuracy(
             [result.group_membership_trace[i] for i in unresolved_indices],
             [scenario.scans[i].unresolved_members for i in unresolved_indices],
         ),
@@ -180,7 +215,8 @@ def _print_rows(rows: list[dict[str, float | str]]) -> None:
     print()
     print(
         f"{'method':24s} "
-        f"{'IDsw':>7s} "
+        f"{'IDtot':>7s} "
+        f"{'IDpost':>7s} "
         f"{'recov':>7s} "
         f"{'delay':>7s} "
         f"{'group':>7s} "
@@ -191,7 +227,8 @@ def _print_rows(rows: list[dict[str, float | str]]) -> None:
     for row in rows:
         print(
             f"{str(row['method']):24s} "
-            f"{float(row['id_switches']):7.2f} "
+            f"{float(row['id_switches_total']):7.2f} "
+            f"{float(row['id_switches_post_split']):7.2f} "
             f"{float(row['label_recovery']):7.2f} "
             f"{float(row['split_delay']):7.2f} "
             f"{float(row['group_membership']):7.2f} "

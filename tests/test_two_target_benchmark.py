@@ -13,4 +13,13 @@ def test_two_target_benchmark_returns_all_methods() -> None:
         "oracle_identity",
     }
     for row in rows:
+        assert "id_switches_total" in row
+        assert "id_switches_pre_merge" in row
+        assert "id_switches_during_unresolved" in row
+        assert "id_switches_post_split" in row
+        assert "label_recovery_post_split" in row
+        assert "split_recovery_delay" in row
+        assert "group_membership_during_unresolved" in row
+        assert row["id_switches"] == row["id_switches_total"]
+        assert row["label_recovery"] == row["label_recovery_post_split"]
         assert float(row["runtime_ms_per_scan"]) >= 0.0
