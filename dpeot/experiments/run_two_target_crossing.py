@@ -21,6 +21,7 @@ from dpeot.metrics.identity import (
 )
 from dpeot.partitions.distance_partition import distance_partition
 from dpeot.partitions.dp_partition import DPPartitionConfig, dp_partition
+from dpeot.partitions.mfm_partition import MFMPartitionConfig, mfm_partition
 from dpeot.scenarios.two_target_merge_split import (
     Scenario,
     ScenarioConfig,
@@ -92,6 +93,10 @@ def _method_factories(scenario: Scenario) -> dict[str, Callable[[], FilterRunRes
             scenario,
             partitioner=_dp_partitioner_factory(scenario),
         ),
+        "mfm_x_order": lambda: run_x_order_clustering_baseline(
+            scenario,
+            partitioner=_mfm_partitioner_factory(scenario),
+        ),
         "proposed_group_labels": lambda: run_identity_aware_group_filter(
             scenario,
             partitioner=_distance_partitioner,
@@ -113,6 +118,23 @@ def _dp_partitioner_factory(scenario: Scenario) -> Callable:
                 covariance_scale=0.7,
                 num_sweeps=3,
                 seed=7919 * scenario.config.seed + scan.k,
+            ),
+        )
+
+    return partitioner
+
+
+def _mfm_partitioner_factory(scenario: Scenario) -> Callable:
+    def partitioner(scan) -> list[list[int]]:
+        return mfm_partition(
+            scan.measurements,
+            MFMPartitionConfig(
+                min_components=1,
+                max_components=4,
+                num_initializations=4,
+                num_iterations=8,
+                penalty_per_component=2.0,
+                seed=104729 * scenario.config.seed + scan.k,
             ),
         )
 
