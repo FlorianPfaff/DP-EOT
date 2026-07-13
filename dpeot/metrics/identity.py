@@ -121,8 +121,13 @@ def group_membership_accuracy(
 ) -> float:
     """Average Jaccard accuracy for unresolved-group member sets."""
 
+    estimated_list = list(estimated_members)
+    true_list = list(true_members)
+    if len(estimated_list) != len(true_list):
+        raise ValueError("estimated_members and true_members must have the same length")
+
     scores: list[float] = []
-    for estimated, truth in zip(estimated_members, true_members):
+    for estimated, truth in zip(estimated_list, true_list):
         union = estimated | truth
         if not union:
             scores.append(1.0)
