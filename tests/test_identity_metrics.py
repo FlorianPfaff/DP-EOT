@@ -1,3 +1,5 @@
+import pytest
+
 from dpeot.metrics.identity import (
     count_identity_switches,
     count_post_split_identity_switches,
@@ -55,3 +57,14 @@ def test_group_membership_accuracy_uses_jaccard_score() -> None:
     truth = [frozenset({"A", "B"}), frozenset({"A", "B"})]
 
     assert group_membership_accuracy(estimated, truth) == 0.75
+
+
+def test_group_membership_accuracy_rejects_mismatched_lengths() -> None:
+    shorter = [frozenset({"A"})]
+    longer = [frozenset({"A"}), frozenset({"B"})]
+
+    with pytest.raises(ValueError, match="same length"):
+        group_membership_accuracy(shorter, longer)
+
+    with pytest.raises(ValueError, match="same length"):
+        group_membership_accuracy(longer, shorter)
