@@ -1,5 +1,19 @@
 # DP-EOT
 
+## Corrected study
+
+The current research question is whether aggregate measurements improve tracking
+beyond preserving labeled tracks through ambiguity, and whether an explicit group
+representation adds value over matched labeled joint-state inference. The
+[locked study protocol](docs/group_value_protocol.md) specifies the corrected
+finite-resolution simulator, uncertain initialization, six controlled methods,
+independent calibration/confirmation trials, and go/no-go criteria.
+
+The experiments documented below are **legacy demonstrations**. Their exact
+initial states, deterministic motion, annotation-only merge intervals, and
+restricted baselines do not establish a novel tracking contribution. Their old
+results must not be combined with the corrected `group_value_v1` artifacts.
+
 Code scaffold for **identity-preserving extended-object tracking of temporarily unresolved target groups**.
 
 The goal is not to use a Dirichlet process as a physical target-cardinality model. The nonparametric component is used for measurement-partition proposal or weighting, while target identity is handled by explicit labels and unresolved-group member sets.

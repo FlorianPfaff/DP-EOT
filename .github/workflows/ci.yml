@@ -26,26 +26,37 @@ jobs:
       - name: Run tests
         run: python -m pytest -q
 
-      - name: Run two-target benchmark
+      - name: Smoke-test corrected finite-resolution study
+        env:
+          OPENBLAS_NUM_THREADS: "1"
+          MKL_NUM_THREADS: "1"
+          OMP_NUM_THREADS: "1"
+        run: |
+          python -m dpeot.experiments.export_group_value_study \
+            --stage pilot --num-trials 1 --workers 2 \
+            --conditions crossing_r2 three_targets near_miss parallel \
+            --output-dir results/group_value_v1/ci_smoke
+
+      - name: Run legacy two-target demonstration
         run: |
           python -m dpeot.experiments.export_two_target_benchmark \
             --num-trials 100 \
             --base-seed 7 \
-            --output-dir results
+            --output-dir results/legacy
 
       - name: Run detector negative controls
         run: |
           python -m dpeot.experiments.export_negative_controls \
             --num-trials 100 \
             --base-seed 11000 \
-            --output-dir results
+            --output-dir results/legacy
 
       - name: Run detector threshold sweep
         run: |
           python -m dpeot.experiments.export_detector_threshold_sweep \
             --num-trials 25 \
             --base-seed 13000 \
-            --output-dir results/detector_threshold_sweep \
+            --output-dir results/legacy/detector_threshold_sweep \
             --figure-dir figures
 
       - name: Upload benchmark artifacts
