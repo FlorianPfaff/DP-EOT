@@ -15,8 +15,9 @@ import shutil
 
 import numpy as np
 
+from dpeot.experiments.export_group_value_study import source_fingerprint
 from dpeot.metrics.group_value import paired_interval, summarize_trace
-from dpeot.scenarios.group_value import CONDITIONS, generate_study_instance
+from dpeot.scenarios.group_value import CONDITIONS, ROOT_SEED, STUDY_VERSION, generate_study_instance
 from dpeot.tracking.group_value import METHODS, StudyFilterConfig, run_study_filter
 
 
@@ -31,13 +32,34 @@ def write_json(path: Path, value) -> None:
     path.write_text(json.dumps(value, indent=2, allow_nan=False) + "\n", encoding="utf-8")
 
 
+def trial_bytes(directory: Path) -> bytes:
+    raw = directory / "trials.json"
+    if raw.exists():
+        return raw.read_bytes()
+    content = gzip.decompress((directory / "trials.json.gz").read_bytes())
+    archive = read_json(directory / "trial_archive.json")
+    if hashlib.sha256(content).hexdigest() != archive["uncompressed_sha256"]:
+        raise ValueError(f"trial archive checksum mismatch: {directory}")
+    return content
+
+
 def audit_phase(directory: Path, name: str) -> tuple[dict, list[dict]]:
     manifest = read_json(directory / "manifest.json")
-    rows = read_json(directory / "trials.json")
+    rows = json.loads(trial_bytes(directory))
     assert manifest["trials"] == PHASE_SIZES[name], (name, "trial count")
     assert len(manifest["conditions"]) == len(CONDITIONS), (name, "condition count")
     assert set(manifest["methods"]) == set(METHODS), (name, "methods")
     keys = [(r["condition_index"], r["trial"], r["method"], r["threshold"]) for r in rows]
+    expected_keys = {
+        (index, trial, method, threshold)
+        for index in range(len(CONDITIONS)) for trial in range(PHASE_SIZES[name]) for method in METHODS
+        for threshold in ((-10., -5., 0., 5., 10.) if name == "calibrate" and method not in {"prediction_only", "oracle_mode"}
+                          else (manifest["thresholds"].get(method, 0.),))
+    }
+    assert set(keys) == expected_keys, (name, "trial/condition/method/threshold combinations")
+    assert manifest["study_version"] == STUDY_VERSION
+    assert manifest["root_seed"] == ROOT_SEED
+    assert {r["phase"] for r in rows} == {"confirm" if name == "beam16" else name}
     expected_per_trial = 22 if name == "calibrate" else 6
     assert len(set(keys)) == len(keys) == len(CONDITIONS) * PHASE_SIZES[name] * expected_per_trial, (name, "duplicate or missing rows")
     assert {r["trial"] for r in rows} == set(range(PHASE_SIZES[name]))
@@ -177,6 +199,7 @@ def main() -> None:
     for name in PHASE_SIZES:
         manifests[name], phases[name] = audit_phase(args.input_root / name, name)
     assert len({m["source_fingerprint"] for m in manifests.values()}) == 1
+    assert manifests["confirm"]["source_fingerprint"] == source_fingerprint()
     assert len({manifests[name]["phase_seed_id"] for name in ("pilot", "calibrate", "confirm", "runtime")}) == 4
     assert manifests["beam16"]["phase_seed_id"] == manifests["confirm"]["phase_seed_id"]
     assert manifests["beam16"]["max_hypotheses"] == 16
@@ -213,12 +236,16 @@ def main() -> None:
         for path in (args.input_root / name).iterdir():
             if path.is_file() and path.name != "trials.json":
                 shutil.copy2(path, target / path.name)
-        raw = (args.input_root / name / "trials.json").read_bytes()
+        raw = trial_bytes(args.input_root / name)
         (target / "trials.json.gz").write_bytes(gzip.compress(raw, mtime=0))
         write_json(target / "trial_archive.json", {"uncompressed_sha256": hashlib.sha256(raw).hexdigest(),
                                                 "rows": len(phases[name]), "archive": "trials.json.gz"})
     proposed_summary = {r["condition"]: r for r in summary if r["method"] == "coupled_group"}
     coast_comparisons = {r["condition"]: r for r in comparisons if r["baseline"] == "labeled_coast"}
+    hypothesis_comparisons = {r["condition"]: r for r in comparisons if r["baseline"] == "labeled_hypothesis"}
+    acceleration_recovery = coast_comparisons["acceleration"]["recovery"]
+    matched_maneuver = hypothesis_comparisons["maneuver"]["labeled_position_rmse"]
+    maneuver_beam = next(r for r in sensitivity if r["condition"] == "maneuver")["rmse_reduction_beam16_vs8"]
     lines = ["# Research Decision", "",
              "The corrected experiment does not establish a new unresolved-group tracking method. "
              "Aggregate observations can help relative to coasting, but a labeled joint-state filter uses the same information and gives equivalent results.",
@@ -232,18 +259,26 @@ def main() -> None:
              f"negative-control false scan rate {detection['coupled_group']['negative_control_false_rate']:.4f}.",
              f"- Qualifying difficult conditions: {', '.join(verdict['qualifying_conditions']) or 'none'}.",
              f"- Recovery noninferiority unresolved: {', '.join(verdict['noninferiority_unresolved']) or 'none'}.",
-             "", "| Condition | Group RMSE | RMSE reduction vs coast (95% CI) | Rec-post | Coverage | Eligible recovery trials |",
-             "| --- | ---: | ---: | ---: | ---: | ---: |"]
+             f"- High-acceleration recovery difference versus coast: {100*acceleration_recovery['estimate']:.2f} percentage points "
+             f"[95% CI {100*acceleration_recovery['low']:.2f}, {100*acceleration_recovery['high']:.2f}]. "
+             "This is inconclusive for the two-point noninferiority margin, not evidence of a demonstrated recovery loss.",
+             f"- Condition-mean membership F1 changes from {proposed_summary['crossing_r1']['group_f1']:.3f} at resolution 1 "
+             f"to {proposed_summary['crossing_r4']['group_f1']:.3f} at resolution 4; pooled detection hides this sensitivity.",
+             "", "| Condition | Group RMSE | RMSE reduction vs coast (95% CI) | RMSE reduction vs labeled hypotheses (95% CI) | Rec-post | Coverage | Eligible recovery trials |",
+             "| --- | ---: | ---: | ---: | ---: | ---: | ---: |"]
     for condition in CONDITIONS:
         row = proposed_summary[condition.name]
         effect = coast_comparisons[condition.name]["labeled_position_rmse"]
+        matched_budget = hypothesis_comparisons[condition.name]["labeled_position_rmse"]
         recovery = "n/a" if row["recovery"] is None else f"{row['recovery']:.3f}"
-        lines.append(f"| {condition.name} | {row['labeled_position_rmse']:.3f} | {100*effect['estimate']:.1f}% [{100*effect['low']:.1f}, {100*effect['high']:.1f}] | {recovery} | {row['coverage_95']:.3f} | {row['recovery_available']}/200 |")
+        lines.append(f"| {condition.name} | {row['labeled_position_rmse']:.3f} | {100*effect['estimate']:.1f}% [{100*effect['low']:.1f}, {100*effect['high']:.1f}] | {100*matched_budget['estimate']:.1f}% [{100*matched_budget['low']:.1f}, {100*matched_budget['high']:.1f}] | {recovery} | {row['coverage_95']:.3f} | {row['recovery_available']}/200 |")
     lines += ["", "## Interpretation and Limits", "",
               "The matched comparator shares the numerical core and assembles the same observation operator in labeled coordinates. "
               "Equality is an algebraic/control result, not an independently reproduced state-of-the-art baseline. "
               "The 2014 Beard/Vo/Vo merged-measurement GLMB paper already demonstrates labeled Bayesian treatment of merging; "
               "our joint Gaussian update does not establish a new mechanism relative to that literature.",
+              "The single-hypothesis coast comparison also changes the hypothesis budget; the eight-hypothesis labeled baseline is the matched-budget coast control. "
+              "Each method uses its separately calibrated threshold, as frozen before confirmation. These controls must accompany any attribution of improvement to aggregate updates.",
               "Known extents/rates and established tracks remain assumptions. The detector uses a truncated candidate bank and a best-mode decision; "
               "covariance-matched ellipses are a diagnostic, not guaranteed posterior credible regions. Oracle mode is not a performance upper bound.",
               "", "## Beam and Runtime Checks", ""]
@@ -255,6 +290,8 @@ def main() -> None:
     for row in runtime:
         lines.append(f"| {row['method']} | {row['mean_ms']:.3f} | {row['p50_ms']:.3f} | {row['p90_ms']:.3f} | {row['max_ms']:.3f} |")
     lines += ["", "Runtime is measured separately with one worker/BLAS thread; p90/max refer to trial-average times, not individual scan latency.",
+              "The maneuver beam-width estimate is large but has a wide interval spanning zero benefit. "
+              "The small paired subset does not establish beam convergence or robust compute-insensitive performance.",
               "", "## Provenance", "", f"Simulation revision: {manifests['confirm']['git_revision']}.",
               f"Source fingerprint: {manifests['confirm']['source_fingerprint']}.",
               "All phase manifests, compressed raw trial records, bootstrap contrasts, calibration decisions, beam checks, and regenerated worst-case traces are included. "
@@ -275,12 +312,25 @@ def main() -> None:
         f"On resolved negative-control scans its false-group rate is {100*group['negative_control_false_rate']:.2f}\\%. "
         f"These pooled detector metrics differ from the condition-averaged F1 in Table~\\ref{{tab:group-value}}.\n\n"
         f"The predeclared difficult conditions meeting the benefit screen are {qualified}. "
+        f"Against the eight-hypothesis matched-budget coast control, the maneuver RMSE reduction is "
+        f"{100*matched_maneuver['estimate']:.1f}\\% (95\\% interval "
+        f"[{100*matched_maneuver['low']:.1f}, {100*matched_maneuver['high']:.1f}]). "
         f"Recovery noninferiority remains unresolved in: {noninferior}. "
+        f"In high acceleration, the recovery difference versus coast is {100*acceleration_recovery['estimate']:.2f} "
+        f"percentage points (95\\% interval [{100*acceleration_recovery['low']:.2f}, {100*acceleration_recovery['high']:.2f}]); "
+        "this is inconclusive for the two-point margin, not demonstrated inferiority. "
         f"The full mechanism gate {'passes' if verdict['mechanism_gate'] else 'does not pass'}. "
         f"The lowest condition-mean 95\\% ellipse coverage is {worst['coverage_95']:.3f} "
         f"({worst['condition'].replace('_', ' ')}), exposing a limitation that localization averages alone conceal.\n\n"
-        "The doubled-beam sensitivity results and separately measured runtime distributions are included in the "
-        "reproducibility artifacts, together with regenerated worst-error and worst-recovery traces. "
+        f"Detection is resolution-sensitive: condition-mean F1 is {proposed_summary['crossing_r1']['group_f1']:.3f} "
+        f"at resolution 1 and {proposed_summary['crossing_r4']['group_f1']:.3f} at resolution 4. "
+        f"Doubling the beam in the maneuver subset changes RMSE by a reduction of {100*maneuver_beam['estimate']:.1f}\\% "
+        f"(95\\% interval [{100*maneuver_beam['low']:.1f}, {100*maneuver_beam['high']:.1f}]); "
+        "the wide interval does not establish beam convergence. "
+        f"Sequential mean runtime is {next(r['mean_ms'] for r in runtime if r['method'] == 'coupled_group'):.2f} ms/scan "
+        f"for the group method and {next(r['mean_ms'] for r in runtime if r['method'] == 'labeled_joint'):.2f} ms/scan "
+        "for labeled joint inference, with no practical representation-specific speedup demonstrated. "
+        "Complete distributions and regenerated worst-error and worst-recovery traces accompany the artifacts. "
         "Regardless of the coast comparison, the representation-specific contribution gate does not pass: "
         "the same information is available to matched labeled joint inference. We therefore stop the current "
         "new-method claim and do not run the conditional broad stress or DP expansion.\n"

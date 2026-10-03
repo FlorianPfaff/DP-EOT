@@ -9,6 +9,34 @@ representation adds value over matched labeled joint-state inference. The
 finite-resolution simulator, uncertain initialization, six controlled methods,
 independent calibration/confirmation trials, and go/no-go criteria.
 
+The completed version-1.1 study used 2,400 held-out scenarios and 14,400
+confirmation method runs. Aggregate updates improved localization over coasting
+in several conditions, but the group and matched labeled-joint implementations
+were identical. Recovery noninferiority was unresolved under high acceleration;
+maneuvers exposed uncertainty and beam-budget failures. The decision is to
+**stop the current new-method/DP-superiority claim**, not expand it with more
+baselines. See the [research decision and complete artifacts](https://github.com/FlorianPfaff/2026-07-DP-EOT-Paper/blob/main/results/group_value_v1/research_decision.md).
+
+The frozen simulation revision is `543d60c1461bbf2fedc1dcfd7a35536b06627b15`.
+Reporting and test-only changes after it do not alter the simulation fingerprint.
+Reproduce all five stages (32 workers except sequential timing), then audit:
+
+```bash
+python -m pip install -e '.[dev,plot]'
+python -m pytest -q
+python scripts/run_group_value_protocol.py --workers 32 --output-root results/group_value_v1
+OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 OMP_NUM_THREADS=1 \
+  python scripts/report_group_value_study.py \
+  --input-root results/group_value_v1 --output-dir results/group_value_report
+```
+
+The report can also read the checksummed compressed trial archives from the
+paper repository. Run it with that repository's `results/group_value_v1` as the
+input root and a separate output directory. The full study ran on gpuserver4090;
+this is a CPU inference workload, not a GPU throughput benchmark.
+
+## Legacy demonstrations
+
 The experiments documented below are **legacy demonstrations**. Their exact
 initial states, deterministic motion, annotation-only merge intervals, and
 restricted baselines do not establish a novel tracking contribution. Their old
@@ -18,7 +46,7 @@ Code scaffold for **identity-preserving extended-object tracking of temporarily 
 
 The goal is not to use a Dirichlet process as a physical target-cardinality model. The nonparametric component is used for measurement-partition proposal or weighting, while target identity is handled by explicit labels and unresolved-group member sets.
 
-## Working paper claim
+## Legacy working claim
 
 Temporarily unresolved groups create an identity problem, not only a localization problem:
 
@@ -32,7 +60,7 @@ A tracker should preserve the identities of `A` and `B` through the merged inter
 2. **partition inference**: distance, oracle, DP/MFM, or other candidate partition mechanisms;
 3. **identity management**: explicit track labels and group member-label sets.
 
-## Initial scope
+## Legacy scope
 
 This repository starts with a deliberately small synthetic benchmark:
 
@@ -168,7 +196,10 @@ The summary reports mean post-split recovery, mean group-detection F1, worst-cas
 
 ## GitHub Actions
 
-The `CI and benchmark` workflow runs on push, pull request, and manual dispatch. It installs the package, runs `pytest`, executes the 100-trial two-target benchmark, detector negative controls, and detector threshold sweep, and uploads the `benchmark-results` artifact containing JSON, Markdown, LaTeX result files, and detector calibration figures.
+The `CI and benchmark` workflow runs on push, pull request, and manual dispatch.
+It runs the tests and a corrected-study smoke check, then retains the legacy
+benchmark, negative controls, and threshold sweep under `results/legacy`.
+The `benchmark-results` artifact is a CI check, not the full confirmatory study.
 
 ## Diagnostic figure
 
@@ -186,4 +217,6 @@ python -m dpeot.experiments.plot_two_target_timeline --output two_target_merge_s
 
 ## Design rule
 
-Every module should support the merge/split identity claim. General-purpose DP tracking, clutter learning, hierarchical scattering-center models, and full PMBM/GLMB machinery should remain out of scope until the core unresolved-group benchmark demonstrates value.
+Further methods work requires a distinct mechanism or theoretical result beyond
+matched labeled joint inference. General-purpose DP tracking, clutter learning,
+and richer extent/rate updates are not substitutes for that contribution gate.

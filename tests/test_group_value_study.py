@@ -148,6 +148,27 @@ def test_scatter_centroid_likelihood_matches_direct_point_product():
     assert allocation_log_likelihood(inputs, hypothesis, (option,), points) == pytest.approx(direct)
 
 
+def test_target_points_outside_the_clutter_box_are_still_allowed():
+    inputs = instance().inputs
+    hypothesis = JointHypothesis(inputs.initial_mean, inputs.initial_covariance, 0., ((0,), (1,)))
+    points = np.array([[31., 0.]])
+    cell = Cell((0,), points[0], np.zeros((2, 2)))
+    source = SourceCell((0,), cell, observation_operator((0,), inputs), np.eye(2), np.log(12.))
+    assert np.isfinite(allocation_log_likelihood(inputs, hypothesis, (source,), points))
+    assert allocation_log_likelihood(inputs, hypothesis, (), points) == -np.inf
+
+
+def test_empty_scans_only_propagate_the_prior_and_covariance():
+    inputs = instance(8).inputs
+    empty = replace(inputs, scans=tuple(ObservationScan(s.k, np.empty((0, 2))) for s in inputs.scans))
+    prediction = run_study_filter(empty, "prediction_only")
+    group = run_study_filter(empty, "coupled_group")
+    np.testing.assert_array_equal(group.means, prediction.means)
+    np.testing.assert_array_equal(group.covariances, prediction.covariances)
+    assert np.trace(group.covariances[-1]) > np.trace(group.covariances[0])
+    assert not group.proposal_failures.any()
+
+
 def test_no_merge_is_not_reported_as_perfect_recovery():
     trial = instance(3)
     trace = run_study_filter(trial.inputs, "prediction_only")
