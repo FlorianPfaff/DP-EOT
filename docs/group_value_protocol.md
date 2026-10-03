@@ -1,4 +1,11 @@
-# Group-value study protocol, version 1
+# Group-value study protocol, version 1.1
+
+Revision 1.1 fixes the uniform-clutter support: an unassigned point outside the
+declared clutter box has zero likelihood. Version 1 runs are superseded. No
+thresholds, scenarios, or decision criteria were changed in this correction;
+fresh root seed 20261004 separates all new phases from the inspected version-1
+data. Version-1 outputs remain on the compute server for provenance and are not
+included in the final paper study.
 
 This protocol supersedes the scientific interpretation of the legacy two-target
 benchmark. The legacy simulator supplies true initial states and changes merge
@@ -69,7 +76,7 @@ determines actual grouping, including accidental events in nominal negative
 controls. Such events are reported, never discarded or relabeled.
 
 Independent SeedSequence streams separate initialization, motion, and measurements;
-root seed is 20261003. Phase, condition, and trial identify each stream. All methods,
+root seed is 20261004. Phase, condition, and trial identify each stream. All methods,
 thresholds, and beam-budget variants share the exact same trial within a phase.
 Pilot/calibration/confirmation/runtime use distinct phase identifiers.
 

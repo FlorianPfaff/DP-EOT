@@ -124,12 +124,13 @@ def test_three_target_sensor_and_detector_can_select_a_pair():
 def test_complete_set_density_counts_unused_measurements_and_misses():
     inputs = instance().inputs
     hypothesis = JointHypothesis(inputs.initial_mean, inputs.initial_covariance, 0., ((0,), (1,)))
-    empty = allocation_log_likelihood(inputs, hypothesis, (), 0)
+    empty = allocation_log_likelihood(inputs, hypothesis, (), np.empty((0, 2)))
     assert empty == -26.0
-    extra = allocation_log_likelihood(inputs, hypothesis, (), 1)
+    extra = allocation_log_likelihood(inputs, hypothesis, (), np.zeros((1, 2)))
     assert extra == pytest.approx(empty + np.log(2.0 / 3600.0))
     no_clutter = replace(inputs, sensor=replace(inputs.sensor, clutter_rate=0))
-    assert allocation_log_likelihood(no_clutter, hypothesis, (), 1) == -np.inf
+    assert allocation_log_likelihood(no_clutter, hypothesis, (), np.zeros((1, 2))) == -np.inf
+    assert allocation_log_likelihood(inputs, hypothesis, (), np.array([[31., 0.]])) == -np.inf
 
 
 def test_scatter_centroid_likelihood_matches_direct_point_product():
@@ -144,7 +145,7 @@ def test_scatter_centroid_likelihood_matches_direct_point_product():
     option = SourceCell((0,), cell, operator, shape / 2, factor)
     from dpeot.tracking.group_value import gaussian_logpdf
     direct = -26 + 2 * np.log(rate) + sum(gaussian_logpdf(p - center, shape) for p in points)
-    assert allocation_log_likelihood(inputs, hypothesis, (option,), 2) == pytest.approx(direct)
+    assert allocation_log_likelihood(inputs, hypothesis, (option,), points) == pytest.approx(direct)
 
 
 def test_no_merge_is_not_reported_as_perfect_recovery():

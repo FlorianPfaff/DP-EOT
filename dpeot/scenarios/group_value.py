@@ -8,9 +8,9 @@ from itertools import combinations
 import numpy as np
 
 
-STUDY_VERSION = "group-value-v1"
+STUDY_VERSION = "group-value-v1.1"
 PHASES = {"pilot": 1, "calibrate": 2, "confirm": 3, "stress": 4, "runtime": 5}
-ROOT_SEED = 20261003
+ROOT_SEED = 20261004
 Group = tuple[int, ...]
 Grouping = tuple[Group, ...]
 

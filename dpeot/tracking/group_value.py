@@ -171,10 +171,14 @@ def _block_diagonal(matrices: list[np.ndarray]) -> np.ndarray:
 
 def allocation_log_likelihood(
     inputs: TrackerInput, hypothesis: JointHypothesis, selected: tuple[SourceCell, ...],
-    num_measurements: int,
+    measurements: np.ndarray,
 ) -> float:
-    assigned = sum(len(option.cell.indices) for option in selected)
-    num_clutter = num_measurements - assigned
+    assigned_indices = {index for option in selected for index in option.cell.indices}
+    num_clutter = len(measurements) - len(assigned_indices)
+    low, high = inputs.sensor.bounds
+    outside = set(np.flatnonzero(np.any((measurements < low) | (measurements > high), axis=1)))
+    if outside - assigned_indices:
+        return -np.inf
     density = inputs.sensor.clutter_rate / (inputs.sensor.bounds[1] - inputs.sensor.bounds[0])**2
     if num_clutter and density == 0:
         return -np.inf
@@ -210,7 +214,7 @@ def _candidates(
             indices = [i for option in selected for i in option.cell.indices]
             if len(set(indices)) != len(indices):
                 continue
-            score = allocation_log_likelihood(inputs, hypothesis, selected, len(measurements))
+            score = allocation_log_likelihood(inputs, hypothesis, selected, measurements)
             if np.isfinite(score):
                 allocations.append((score, grouping, selected))
     best_group = max((score for score, grouping, _ in allocations if has_group(grouping)), default=-np.inf)
